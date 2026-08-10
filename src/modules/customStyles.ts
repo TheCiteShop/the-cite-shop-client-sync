@@ -1,7 +1,8 @@
 import { getString } from "../utils/locale";
 import { getColors } from "../utils/theme";
 import { csLog } from "../utils/logger";
-import { API_BASE, LicenseStatus } from "./license";
+import { getApiBase } from "./license";
+import { styleLedger } from "./styleLedger";
 
 interface StyleData {
   id: string;
@@ -35,27 +36,27 @@ class CustomStylesManager {
     ]);
   }
 
+  /**
+   * Throws on failure rather than returning []. Swallowing the error made
+   * "you are offline" indistinguishable from "you own nothing", so an offline
+   * customer was told to contact support.
+   */
   private async fetchRemoteStyles(licenseKey: string): Promise<StyleData[]> {
     csLog("INFO", "Fetching remote styles list");
-    try {
-      const response = await this.fetchWithTimeout(
-        `${API_BASE}/styles?license_key=${encodeURIComponent(licenseKey)}`,
-      );
-      const styles = response.response as unknown as any[];
-      csLog(
-        "INFO",
-        `Remote styles fetched: ${(styles as any[]).length} styles`,
-      );
-      return styles.map((s: any) => ({
-        id: s.id,
-        name: s.name,
-        remoteDate: s.updated ? new Date(s.updated) : null,
-        hash: s.hash ?? "",
-      }));
-    } catch (e) {
-      csLog("ERROR", "fetchRemoteStyles error:", e);
-      return [];
+    const response = await this.fetchWithTimeout(
+      `${getApiBase()}/styles?license_key=${encodeURIComponent(licenseKey)}`,
+    );
+    const styles = response.response as unknown as any[];
+    if (!Array.isArray(styles)) {
+      throw new Error("Style list response was not an array");
     }
+    csLog("INFO", `Remote styles fetched: ${styles.length} styles`);
+    return styles.map((s: any) => ({
+      id: s.id,
+      name: s.name,
+      remoteDate: s.updated ? new Date(s.updated) : null,
+      hash: s.hash ?? "",
+    }));
   }
 
   private async fetchRemoteStyleContent(
@@ -64,7 +65,7 @@ class CustomStylesManager {
     expectedHash: string,
   ): Promise<string> {
     const response = await this.fetchWithTimeout(
-      `${API_BASE}/styles/${styleId}?license_key=${encodeURIComponent(licenseKey)}`,
+      `${getApiBase()}/styles/${styleId}?license_key=${encodeURIComponent(licenseKey)}`,
     );
     const data = response.response as unknown as { content: string };
     if (!data.content) throw new Error("No content in response");
@@ -85,11 +86,26 @@ class CustomStylesManager {
 
   // ─── Zotero Style Helpers ─────────────────────────────────────
 
+  /**
+   * Resolve the CSL id Zotero keys this style under. Prefer the id we recorded
+   * at install time; fall back to the conventional guess for styles we have
+   * not installed yet. The guess is only a guess — the CSL's own <id> element
+   * is authoritative, and the shop slug need not match it.
+   */
+  private resolveStyleID(shopId: string): string {
+    const known = styleLedger.read().find((e) => e.shopId === shopId);
+    return known?.styleID ?? `http://www.zotero.org/styles/${shopId}`;
+  }
+
   private getInstalledStyleDate(styleId: string): Date | null {
     try {
       const zotero = ztoolkit.getGlobal("Zotero");
-      const id = `http://www.zotero.org/styles/${styleId}`;
-      const installedStyle = zotero.Styles.get(id);
+      // skipMappings=true: report on the exact style we track, not whatever
+      // Zotero's renamed-style map would redirect this id to.
+      const installedStyle = zotero.Styles.get(
+        this.resolveStyleID(styleId),
+        true,
+      );
       if (!installedStyle?.updated) return null;
       const parsed = new Date(installedStyle.updated.replace(" ", "T") + "Z");
       return isNaN(parsed.getTime()) ? null : parsed;
@@ -109,17 +125,69 @@ class CustomStylesManager {
     return "up-to-date";
   }
 
-  async installStyleToZotero(styleId: string, styleContent: string) {
-    csLog("INFO", `Installing style: ${styleId}`);
-    try {
-      const zotero = ztoolkit.getGlobal("Zotero");
-      if (!zotero) throw new Error("Zotero global not found");
-      const style = await zotero.Styles.install(styleContent, null, true);
-      csLog("INFO", `Style installed: ${style.title}`);
-    } catch (e) {
-      csLog("ERROR", "installStyleToZotero error:", e);
-      throw e;
+  /**
+   * Installs a style and records it in the ownership ledger.
+   *
+   * @returns false if the user declined to replace an existing style.
+   */
+  async installStyleToZotero(
+    shopId: string,
+    styleContent: string,
+    win: Window,
+  ): Promise<boolean> {
+    csLog("INFO", `Installing style: ${shopId}`);
+
+    // Parse the CSL's own identity rather than trusting the shop slug or the
+    // install() return value (which is {styleTitle, styleID} — reading .title
+    // off it logged `undefined` for every install).
+    const cslId = /<id>\s*([^<\s]+)\s*<\/id>/.exec(styleContent)?.[1];
+    const cslTitle = /<title>([\s\S]*?)<\/title>/
+      .exec(styleContent)?.[1]
+      ?.trim();
+    if (!cslId) {
+      throw new Error("CSL file has no <id> — refusing to install");
     }
+
+    const zotero = ztoolkit.getGlobal("Zotero") as any;
+    if (!zotero?.Styles) throw new Error("Zotero.Styles not available");
+
+    // Zotero's install overwrites a style sharing this id, so warn before we
+    // replace something the customer installed themselves. Once replaced their
+    // original is gone, which is why we take ownership rather than refusing to
+    // remove it later.
+    const prior = zotero.Styles.get(cslId, true);
+    const alreadyOurs = styleLedger.has(cslId);
+    const preexisting = !!prior && !alreadyOurs;
+
+    if (preexisting) {
+      const proceed = win.confirm(
+        getString("status-replace-existing", {
+          args: { name: prior.title || cslId },
+        }),
+      );
+      if (!proceed) {
+        csLog("INFO", `User declined to replace existing style ${cslId}`);
+        return false;
+      }
+    }
+
+    await zotero.Styles.install(styleContent, null, true);
+
+    // Confirm it actually landed before recording, so we never write a
+    // phantom entry pointing at a style that does not exist.
+    if (!zotero.Styles.get(cslId, true)) {
+      throw new Error(`Style ${cslId} not found in Zotero after install`);
+    }
+
+    styleLedger.record({
+      shopId,
+      styleID: cslId,
+      title: cslTitle || shopId,
+      installedAt: Date.now(),
+      preexisting,
+    });
+    csLog("INFO", `Style installed and recorded: ${cslTitle ?? cslId}`);
+    return true;
   }
 
   // ─── Check & Install Updates ──────────────────────────────────
@@ -133,10 +201,6 @@ class CustomStylesManager {
   ): Promise<number> {
     csLog("INFO", "Checking for style updates");
     const styles = await this.fetchRemoteStyles(licenseKey);
-
-    if (styles.length === 0) {
-      throw new Error("Could not fetch styles from server.");
-    }
 
     const updatable = styles.filter(
       (s) => this.getStyleStatus(s) === "update-available",
@@ -153,7 +217,12 @@ class CustomStylesManager {
             licenseKey,
             s.hash,
           );
-          await this.installStyleToZotero(s.id, content);
+          const installed = await this.installStyleToZotero(s.id, content, win);
+          if (!installed) {
+            btn.textContent = getString("btn-update");
+            btn.removeAttribute("disabled");
+            return;
+          }
           statusEl.textContent = getString("status-updated-ok", {
             args: { name: s.name },
           });
@@ -365,12 +434,38 @@ class CustomStylesManager {
 
   // ─── UI: Prefs Panel ──────────────────────────────────────────
 
+  /**
+   * Read-only list of the styles we have installed, drawn from the ownership
+   * ledger. Used during the offline tolerance window, when the style list
+   * cannot be fetched and nothing can be installed anyway.
+   */
+  public renderInstalledFromLedger(doc: Document, container: HTMLElement) {
+    container.innerHTML = "";
+    for (const entry of styleLedger.read()) {
+      const row = doc.createElement("div");
+      Object.assign(row.style, {
+        display: "flex",
+        alignItems: "center",
+        gap: "8px",
+        padding: "10px 8px",
+        fontSize: "14px",
+      });
+      const mark = doc.createElement("span");
+      mark.textContent = "✓";
+      const name = doc.createElement("span");
+      name.textContent = entry.title;
+      name.style.fontWeight = "600";
+      row.appendChild(mark);
+      row.appendChild(name);
+      container.appendChild(row);
+    }
+  }
+
   public async renderStylesInPrefs(
     doc: Document,
     win: Window,
     container: HTMLElement,
     statusEl: HTMLElement,
-    licenseStatus: LicenseStatus,
     licenseKey: string,
   ) {
     container.innerHTML = "";
@@ -406,7 +501,15 @@ class CustomStylesManager {
               licenseKey,
               s.hash,
             );
-            await this.installStyleToZotero(s.id, content);
+            const installed = await this.installStyleToZotero(
+              s.id,
+              content,
+              win,
+            );
+            if (!installed) {
+              render();
+              return;
+            }
             statusEl.textContent = getString("status-installed-ok", {
               args: { name: s.name },
             });

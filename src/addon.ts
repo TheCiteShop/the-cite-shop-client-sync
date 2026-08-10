@@ -20,6 +20,17 @@ class Addon {
       rows: Array<{ [dataKey: string]: string }>;
     };
     dialog?: DialogHelper;
+    /**
+     * Subscription enforcement state. Plugin-scoped and created once, which is
+     * what makes duplicate enforcement timers structurally impossible.
+     */
+    license: {
+      timerId?: ReturnType<typeof setTimeout>;
+      /** Re-entrancy guard — startup, timer and prefs checks can overlap. */
+      enforcing?: boolean;
+      lastOutcome?: string;
+      lastCheckAt?: number;
+    };
   };
   // Lifecycle hooks
   public hooks: typeof hooks;
@@ -33,6 +44,7 @@ class Addon {
       env: __env__,
       initialized: false,
       ztoolkit: createZToolkit(),
+      license: {},
     };
     this.hooks = hooks;
     this.api = {};

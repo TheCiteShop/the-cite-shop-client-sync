@@ -10,8 +10,9 @@ Please download the latest version of the plugin here:
 ## Requirements
 
 - Zotero 7 or later
-- A valid license key (purchased at [theciteshop.com](https://theciteshop.com))
-- A Zotero account (zotero.org)
+- An active subscription (purchased at [theciteshop.com](https://theciteshop.com))
+- A Zotero account (zotero.org) — your licence is tied to this account, and works on as many devices as you like
+- A periodic internet connection — see [Subscription and offline use](#subscription-and-offline-use)
 
 ## Installation
 
@@ -41,6 +42,24 @@ When updated versions of your styles are available:
 
 More detailled instructions with screenshots can be seen on my website: [The Cite Shop Client Sync – Setup & Use](https://theciteshop.com/en/client-sync-einrichtung/)
 
+## Subscription and offline use
+
+Styles installed by this plugin are tied to an active subscription.
+
+- The plugin verifies your licence when Zotero starts, once a day while it is
+  running, and whenever you open its settings pane.
+- **You can work offline for up to 3 days.** If no licence check has succeeded
+  in that time, your purchased styles are removed from Zotero and you will see
+  a notification explaining why. Reconnect and open the settings pane to
+  reinstall them.
+- If your subscription ends, is refunded, or is revoked, your purchased styles
+  are removed the next time the plugin checks.
+- Clearing your credentials, or uninstalling the plugin, also removes them.
+
+Only styles this plugin installed are ever removed. Styles you installed
+yourself from Zotero's public style repository are left alone. If a purchased
+style would replace one you already have, the plugin asks first.
+
 ## Troubleshooting
 
 **"Please log in to your Zotero account"**
@@ -49,8 +68,12 @@ More detailled instructions with screenshots can be seen on my website: [The Cit
 **"Email does not match this license key"**
 → Make sure you are using the same email address you used when purchasing.
 
-**"Activation limit reached"**
-→ You have reached the maximum number of devices for this license. Please contact support to deactivate an old device.
+**My styles disappeared**
+→ One of three things happened: your subscription ended; the plugin could not
+reach the licence server for more than 3 days; or the credentials were cleared.
+Open **Settings → The Cite Shop Client Sync** — the status message will say
+which. Once your subscription is active and you are online, verify your licence
+and reinstall.
 
 ## Support
 
@@ -66,5 +89,8 @@ For license issues or support, please contact: info@theciteshop.com
 - License validation via email and license key
 - Browse, install, and update purchased citation styles within Zotero
 - Dark mode support: all UI elements adapt to Zotero's light/dark theme
-- Offline support via cache and grace period
+- Subscription enforcement: licence is re-checked at startup, daily, and when
+  the settings pane is opened
+- Purchased styles are removed if the subscription ends, or if no licence check
+  has succeeded for 3 days; only styles installed by this plugin are touched
 - Auto-opens settings on first install
