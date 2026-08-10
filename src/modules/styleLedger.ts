@@ -48,7 +48,23 @@ export interface RemovalReport {
   aborted?: string;
 }
 
+/**
+ * Prefer the bare `Zotero` global over ztoolkit.
+ *
+ * `ztoolkit` is created by the plugin's own entry point, so it is absent in
+ * the test bundle's scope and can be torn down by unregisterAll(). Reaching
+ * for it first meant removal could abort with "no-styles-api" and silently
+ * delete nothing — a licensing control that quietly no-ops is the worst
+ * possible failure. The bare global is present wherever this code can run.
+ */
 function getStylesApi(): any | null {
+  try {
+    if (typeof Zotero !== "undefined" && (Zotero as any)?.Styles) {
+      return (Zotero as any).Styles;
+    }
+  } catch {
+    // fall through to ztoolkit
+  }
   try {
     const zotero = ztoolkit.getGlobal("Zotero") as any;
     return zotero?.Styles ?? null;
