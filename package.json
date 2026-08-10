@@ -35,7 +35,6 @@
   },
   "dependencies": {
     "core-js": "^3.48.0",
-    "glob": "^13.0.6",
     "zotero-plugin-toolkit": "^5.2.0"
   },
   "devDependencies": {
