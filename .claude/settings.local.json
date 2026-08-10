@@ -9,7 +9,7 @@
       "WebFetch(domain:raw.githubusercontent.com)",
       "WebFetch(domain:github.com)",
       "Bash(npx tsc:*)",
-      "Bash(curl -sL \"https://github.com/POBrien333/citationstyler-client-sync/releases/download/release/update-beta.json\")"
+      "Bash(curl -sL \"https://github.com/TheCiteShop/theciteshop-client-sync/releases/download/release/update-beta.json\")"
     ]
   }
 }

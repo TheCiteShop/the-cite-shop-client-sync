@@ -1,11 +1,11 @@
-# Citation Styler Client Sync — Zotero Plugin
+# The Cite Shop Client Sync — Zotero Plugin
 
 ## Project Overview
 
 This is a Zotero plugin that enables users to install and manage custom citation styles directly within Zotero. The plugin authenticates users via license keys, validates their credentials, and provides an interface for installing and updating purchased custom styles.
 
-**Repository:** https://github.com/POBrien333/citationstyler-client-sync
-**Plugin ID:** `citationstyler-sync@citationstyler.com`
+**Repository:** https://github.com/TheCiteShop/theciteshop-client-sync
+**Plugin ID:** `theciteshop-sync@theciteshop.com`
 **License:** AGPL-3.0-or-later
 **Version:** 1.0.0 (MVP)
 
@@ -162,11 +162,11 @@ npm run update-deps    # Update dependencies
 
 ```json
 "config": {
-  "addonName": "Citation Styler Client Sync",
-  "addonID": "citationstyler-sync@citationstyler.com",
-  "addonRef": "citationstyler-sync",           // Namespace for chrome://
-  "addonInstance": "CitationStylerSync",      // Global Zotero object instance
-  "prefsPrefix": "extensions.zotero.citationstyler-sync"  // Prefs storage prefix
+  "addonName": "The Cite Shop Client Sync",
+  "addonID": "theciteshop-sync@theciteshop.com",
+  "addonRef": "theciteshop-sync",           // Namespace for chrome://
+  "addonInstance": "TheCiteShopSync",      // Global Zotero object instance
+  "prefsPrefix": "extensions.zotero.theciteshop-sync"  // Prefs storage prefix
 }
 ```
 
@@ -181,7 +181,7 @@ npm run update-deps    # Update dependencies
 
 When the plugin is first installed:
 
-1. Checks `extensions.citationstyler.installed` preference
+1. Checks `extensions.theciteshop.installed` preference
 2. If not set, opens the preferences pane automatically
 3. User enters email and license key
 4. Plugin validates against backend
@@ -271,7 +271,7 @@ Tests are written in Mocha + Chai in `test/startup.test.ts`.
 
 ## Author & Support
 
-**Author:** Citation Styler
-**Email:** info@citationstyler.com
-**Website:** https://citationstyler.com
-**Issues:** https://github.com/POBrien333/citationstyler-client-sync/issues
+**Author:** The Cite Shop
+**Email:** info@theciteshop.com
+**Website:** https://theciteshop.com
+**Issues:** https://github.com/TheCiteShop/theciteshop-client-sync/issues

@@ -1,3 +1,3 @@
-startup-begin = Citation Styler wird geladen
-startup-finish = Citation Styler ist bereit
-prefs-title = Citation Styler
+startup-begin = The Cite Shop wird geladen
+startup-finish = The Cite Shop ist bereit
+prefs-title = The Cite Shop

@@ -1,11 +1,11 @@
-# Citation Styler Client Sync — Zotero-Plugin
+# The Cite Shop Client Sync — Zotero-Plugin
 
 Ein Zotero-Plugin, mit dem Sie Ihre gekauften Zitierstile direkt in Zotero installieren und verwalten können.
 
 ## Voraussetzungen
 
 - Zotero 7 oder neuer
-- Ein gültiger Lizenzschlüssel (erhältlich auf [citationstyler.com](https://citationstyler.com))
+- Ein gültiger Lizenzschlüssel (erhältlich auf [theciteshop.com](https://theciteshop.com))
 - Ein Zotero-Konto (zotero.org)
 
 ## Installation
@@ -47,4 +47,4 @@ Wenn aktualisierte Versionen Ihrer Stile verfügbar sind:
 
 ## Support
 
-Bei Lizenzproblemen oder Fragen wenden Sie sich bitte an: info@citationstyler.com
+Bei Lizenzproblemen oder Fragen wenden Sie sich bitte an: info@theciteshop.com

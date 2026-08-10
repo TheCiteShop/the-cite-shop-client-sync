@@ -1,28 +1,28 @@
 {
-  "name": "citationstyler-client-sync",
+  "name": "theciteshop-client-sync",
   "type": "module",
-  "version": "1.0.6",
-  "description": "A Zotero plugin for managing and installing custom citation styles with license validation.",
+  "version": "0.0.1",
+  "description": "A Zotero plugin for managing and installing custom citation styles from The Cite Shop.",
   "config": {
-    "addonName": "Citation Styler Client Sync",
-    "addonID": "citationstyler-sync@citationstyler.com",
-    "addonRef": "citationstyler-sync",
-    "addonInstance": "CitationStylerSync",
-    "prefsPrefix": "extensions.zotero.citationstyler-sync"
+    "addonName": "The Cite Shop Client Sync",
+    "addonID": "theciteshop-sync@theciteshop.com",
+    "addonRef": "theciteshop-sync",
+    "addonInstance": "TheCiteShopSync",
+    "prefsPrefix": "extensions.zotero.theciteshop-sync"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/POBrien333/citationstyler-client-sync.git"
+    "url": "git+https://github.com/TheCiteShop/theciteshop-client-sync.git"
   },
   "author": {
-    "name": "Citation Styler",
-    "email": "info@citationstyler.com",
-    "url": "https://citationstyler.com/en/"
+    "name": "The Cite Shop",
+    "email": "info@theciteshop.com",
+    "url": "https://theciteshop.com/"
   },
   "bugs": {
-    "url": "https://github.com/POBrien333/citationstyler-client-sync/issues"
+    "url": "https://github.com/TheCiteShop/theciteshop-client-sync/issues"
   },
-  "homepage": "https://citationstyler.com/en/",
+  "homepage": "https://theciteshop.com/",
   "license": "AGPL-3.0-or-later",
   "scripts": {
     "start": "zotero-plugin serve",
@@ -35,7 +35,8 @@
   },
   "dependencies": {
     "core-js": "^3.48.0",
-    "zotero-plugin-toolkit": "^5.1.0-beta.13"
+    "glob": "^13.0.6",
+    "zotero-plugin-toolkit": "^5.2.0"
   },
   "devDependencies": {
     "@types/chai": "^5.2.3",
@@ -47,7 +48,7 @@
     "mocha": "^11.3.0",
     "prettier": "^3.7.4",
     "typescript": "^5.9.3",
-    "zotero-plugin-scaffold": "^0.8.5",
+    "zotero-plugin-scaffold": "^0.8.8",
     "zotero-types": "^4.1.0-beta.4"
   },
   "prettier": {

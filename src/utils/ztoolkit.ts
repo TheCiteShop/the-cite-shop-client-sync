@@ -1,15 +1,9 @@
-import { ZoteroToolkit } from "zotero-plugin-toolkit";
 import { config } from "../../package.json";
 
 export { createZToolkit };
 
 function createZToolkit() {
-  const _ztoolkit = new ZoteroToolkit();
-  /**
-   * Alternatively, import toolkit modules you use to minify the plugin size.
-   * You can add the modules under the `MyToolkit` class below and uncomment the following line.
-   */
-  // const _ztoolkit = new MyToolkit();
+  const _ztoolkit = new MyToolkit();
   initZToolkit(_ztoolkit);
   return _ztoolkit;
 }
@@ -27,19 +21,30 @@ function initZToolkit(_ztoolkit: ReturnType<typeof createZToolkit>) {
   _ztoolkit.basicOptions.api.pluginID = config.addonID;
   _ztoolkit.ProgressWindow.setIconURI(
     "default",
-    `chrome://${config.addonRef}/content/icons/favicon.png`,
+    `chrome://${config.addonRef}/content/icons/the-cite-shop-client-sync-favicon-96.png`,
   );
 }
 
-import { BasicTool, unregister } from "zotero-plugin-toolkit";
-import { UITool } from "zotero-plugin-toolkit";
+import {
+  BasicTool,
+  ProgressWindowHelper,
+  UITool,
+  makeHelperTool,
+  unregister,
+} from "zotero-plugin-toolkit";
 
+/**
+ * Toolkit v5 removed the all-in-one `ZoteroToolkit` class, so compose only the
+ * modules this plugin uses. This also keeps the bundle small.
+ */
 class MyToolkit extends BasicTool {
   UI: UITool;
+  ProgressWindow: typeof ProgressWindowHelper;
 
   constructor() {
     super();
     this.UI = new UITool(this);
+    this.ProgressWindow = makeHelperTool(ProgressWindowHelper, this);
   }
 
   unregisterAll() {

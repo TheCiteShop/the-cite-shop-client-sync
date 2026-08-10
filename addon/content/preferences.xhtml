@@ -1,5 +1,5 @@
 <linkset>
-  <html:link rel="localization" href="citationstyler-sync-preferences.ftl" />
+  <html:link rel="localization" href="theciteshop-sync-preferences.ftl" />
 </linkset>
 
 <groupbox
@@ -9,20 +9,23 @@
     style="display: flex; align-items: baseline; gap: 10px; margin-bottom: 4px"
   >
     <html:h2
-      data-l10n-id="citationstyler-sync-prefs-title"
+      data-l10n-id="theciteshop-sync-prefs-title"
       style="margin: 0"
     ></html:h2>
-    <html:span id="prefs-version" style="font-size: 12px"></html:span>
+    <html:span
+      id="__addonRef__-prefs-version"
+      style="font-size: 12px"
+    ></html:span>
   </html:div>
 
   <!-- Email -->
   <hbox align="center" style="margin-bottom: 8px">
     <html:label
-      data-l10n-id="citationstyler-sync-email-label"
+      data-l10n-id="theciteshop-sync-email-label"
       style="min-width: 120px; font-weight: 600; font-size: 13px"
     ></html:label>
     <html:input
-      id="prefs-email-input"
+      id="__addonRef__-prefs-email-input"
       type="email"
       style="
         flex: 1;
@@ -37,11 +40,11 @@
   <!-- License Key -->
   <hbox align="center" style="margin-bottom: 12px">
     <html:label
-      data-l10n-id="citationstyler-sync-license-label"
+      data-l10n-id="theciteshop-sync-license-label"
       style="min-width: 120px; font-weight: 600; font-size: 13px"
     ></html:label>
     <html:input
-      id="prefs-license-input"
+      id="__addonRef__-prefs-license-input"
       type="text"
       style="
         flex: 1;
@@ -57,8 +60,8 @@
   <!-- Buttons -->
   <hbox align="center" style="margin-bottom: 6px; gap: 8px">
     <html:button
-      id="prefs-verify-btn"
-      data-l10n-id="citationstyler-sync-verify-btn"
+      id="__addonRef__-prefs-verify-btn"
+      data-l10n-id="theciteshop-sync-verify-btn"
       style="
         padding: 6px 18px;
         font-weight: 600;
@@ -71,8 +74,8 @@
     >
     </html:button>
     <html:button
-      id="prefs-logout-btn"
-      data-l10n-id="citationstyler-sync-clear-btn"
+      id="__addonRef__-prefs-logout-btn"
+      data-l10n-id="theciteshop-sync-clear-btn"
       style="
         padding: 6px 18px;
         font-size: 13px;
@@ -88,8 +91,8 @@
     >
     </html:button>
     <html:button
-      id="prefs-copy-logs-btn"
-      data-l10n-id="citationstyler-sync-copy-logs-btn"
+      id="__addonRef__-prefs-copy-logs-btn"
+      data-l10n-id="theciteshop-sync-copy-logs-btn"
       style="
         padding: 6px 14px;
         font-size: 13px;
@@ -108,25 +111,28 @@
 
   <!-- Status / logs feedback -->
   <html:div
-    id="prefs-logs-status"
+    id="__addonRef__-prefs-logs-status"
     style="margin-bottom: 4px; min-height: 16px; font-size: 12px"
   />
   <html:div
-    id="prefs-status"
+    id="__addonRef__-prefs-status"
     style="margin-bottom: 10px; min-height: 18px; font-size: 13px"
   />
 
   <!-- Styles list -->
-  <html:div id="prefs-styles-container" style="min-height: 60px" />
+  <html:div
+    id="__addonRef__-prefs-styles-container"
+    style="min-height: 60px"
+  />
 
   <!-- Update row -->
   <html:div
-    id="prefs-update-row"
+    id="__addonRef__-prefs-update-row"
     style="display: none; margin-top: 10px; align-items: center"
   >
     <html:button
-      id="prefs-check-updates-btn"
-      data-l10n-id="citationstyler-sync-update-btn"
+      id="__addonRef__-prefs-check-updates-btn"
+      data-l10n-id="theciteshop-sync-update-btn"
       style="
         padding: 6px 18px;
         font-size: 13px;
@@ -138,7 +144,7 @@
     >
     </html:button>
     <html:div
-      id="prefs-update-status"
+      id="__addonRef__-prefs-update-status"
       style="margin-left: 12px; font-size: 13px"
     />
   </html:div>

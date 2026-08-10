@@ -17,7 +17,9 @@ async function onStartup() {
 
   const mainWin = Zotero.getMainWindows()[0] as unknown as Window;
   const dark = mainWin ? isDarkMode(mainWin) : false;
-  const icon = dark ? "citation-styler-favicon-96-white.png" : "favicon.png";
+  const icon = dark
+    ? "the-cite-shop-client-sync-favicon-96-white.png"
+    : "the-cite-shop-client-sync-favicon-96.png";
 
   Zotero.PreferencePanes.register({
     pluginID: addon.data.config.addonID,
@@ -32,10 +34,10 @@ async function onStartup() {
 
   // ── Open prefs pane on first install ──────────────────────────
   const isFirstInstall = !Zotero.Prefs.get(
-    "extensions.citationstyler.installed",
+    "extensions.theciteshop.installed",
   );
   if (isFirstInstall) {
-    Zotero.Prefs.set("extensions.citationstyler.installed", true);
+    Zotero.Prefs.set("extensions.theciteshop.installed", true);
     await new Promise((resolve) => setTimeout(resolve, 1000));
     Zotero.Utilities.Internal.openPreferences(addon.data.config.addonRef);
   }
@@ -82,29 +84,27 @@ async function onPrefsEvent(type: string, data: { [key: string]: any }) {
   const win: Window = data.window;
   const doc: Document = win.document;
 
-  const versionEl = doc.getElementById("prefs-version") as HTMLElement;
+  // Zotero renders every plugin's preference pane into one shared document, so
+  // element IDs are namespaced with the addon ref. Unprefixed IDs collide with
+  // other plugins — notably an older build of this one still installed.
+  const byId = <T extends HTMLElement = HTMLElement>(id: string) =>
+    doc.getElementById(`${addon.data.config.addonRef}-${id}`) as T;
+
+  const versionEl = byId("prefs-version");
   if (versionEl) {
     versionEl.textContent = `v${version}`;
     versionEl.style.color = getColors(win).mutedText;
   }
 
-  const verifyBtn = doc.getElementById("prefs-verify-btn") as HTMLElement;
-  const emailInput = doc.getElementById(
-    "prefs-email-input",
-  ) as HTMLInputElement;
-  const licenseInput = doc.getElementById(
-    "prefs-license-input",
-  ) as HTMLInputElement;
-  const statusDiv = doc.getElementById("prefs-status") as HTMLElement;
-  const stylesContainer = doc.getElementById(
-    "prefs-styles-container",
-  ) as HTMLElement;
-  const logoutBtn = doc.getElementById("prefs-logout-btn") as HTMLElement;
-  const updateRow = doc.getElementById("prefs-update-row") as HTMLElement;
-  const updateBtn = doc.getElementById(
-    "prefs-check-updates-btn",
-  ) as HTMLElement;
-  const updateStatus = doc.getElementById("prefs-update-status") as HTMLElement;
+  const verifyBtn = byId("prefs-verify-btn");
+  const emailInput = byId<HTMLInputElement>("prefs-email-input");
+  const licenseInput = byId<HTMLInputElement>("prefs-license-input");
+  const statusDiv = byId("prefs-status");
+  const stylesContainer = byId("prefs-styles-container");
+  const logoutBtn = byId("prefs-logout-btn");
+  const updateRow = byId("prefs-update-row");
+  const updateBtn = byId("prefs-check-updates-btn");
+  const updateStatus = byId("prefs-update-status");
 
   if (
     !verifyBtn ||
@@ -310,8 +310,8 @@ async function onPrefsEvent(type: string, data: { [key: string]: any }) {
   });
 
   // ── Copy Logs button ──────────────────────────────────────────────────────
-  const copyLogsBtn = doc.getElementById("prefs-copy-logs-btn") as HTMLElement;
-  const logsStatusDiv = doc.getElementById("prefs-logs-status") as HTMLElement;
+  const copyLogsBtn = byId("prefs-copy-logs-btn");
+  const logsStatusDiv = byId("prefs-logs-status");
 
   copyLogsBtn?.addEventListener("click", async () => {
     const text = getFormattedLogs();

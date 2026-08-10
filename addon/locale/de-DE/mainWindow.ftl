@@ -1,1 +1,1 @@
-citationstyler-sync-menu-item-label = Citation Styler
+theciteshop-sync-menu-item-label = The Cite Shop

@@ -1,10 +1,10 @@
 import { csLog } from "../utils/logger";
 
-const PREF_LICENSE_KEY = "extensions.citationstyler.licenseKey";
-const PREF_EMAIL = "extensions.citationstyler.email";
-const PREF_ZOTERO_USER_ID = "extensions.citationstyler.zoteroUserId";
-const PREF_CACHE_VALID = "extensions.citationstyler.cacheValid";
-const PREF_CACHE_EXPIRY = "extensions.citationstyler.cacheExpiry";
+const PREF_LICENSE_KEY = "extensions.theciteshop.licenseKey";
+const PREF_EMAIL = "extensions.theciteshop.email";
+const PREF_ZOTERO_USER_ID = "extensions.theciteshop.zoteroUserId";
+const PREF_CACHE_VALID = "extensions.theciteshop.cacheValid";
+const PREF_CACHE_EXPIRY = "extensions.theciteshop.cacheExpiry";
 
 const CACHE_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 const GRACE_PERIOD_MS = 7 * 24 * 60 * 60 * 1000;
@@ -228,4 +228,4 @@ export class LicenseManager {
 
 export const licenseManager = new LicenseManager();
 
-export const API_BASE = "https://citationstyler.com/wp-json/citationstyler/v1";
+export const API_BASE = "https://theciteshop.com/wp-json/theciteshop/v1";
