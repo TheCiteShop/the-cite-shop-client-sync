@@ -224,9 +224,68 @@ existing file, so the plugin asks first.
 
 ---
 
-## 8. Destructive check of the removal path
+## 8. Automated smoke test (no GUI, no backend)
 
-Only for a throwaway profile, or a style you have a copy of.
+The whole removal path can be exercised end to end by seeding the isolated dev
+profile before launch, then checking the filesystem. Nothing needs clicking, and
+it verifies the dangerous path and the safety property in one run.
+
+**Verified working on 2026-08-10.**
+
+```bash
+# 1. Seed two styles into the isolated data dir: one to be removed, one control
+mkdir -p .scaffold/data/styles .scaffold/profile
+cp /path/to/your-style.csl        .scaffold/data/styles/   # will be in the ledger
+cp /path/to/some-other-style.csl  .scaffold/data/styles/   # control, must survive
+
+# 2. Seed prefs. NOTE the doubled physical key names — user.js is not
+#    Zotero.Prefs, so the extensions.zotero. prefix must be written out.
+node -e '
+const fs = require("fs");
+const P = "extensions.zotero.extensions.theciteshop.";
+const ledger = JSON.stringify({ v: 1, entries: [{
+  shopId: "your-style",
+  styleID: "http://www.zotero.org/styles/your-style",
+  title: "Your Style",
+  installedAt: Date.now(),
+  preexisting: false
+}]});
+fs.writeFileSync(".scaffold/profile/user.js", [
+  `user_pref(${JSON.stringify(P + "email")}, "qa@theciteshop.com");`,
+  `user_pref(${JSON.stringify(P + "licenseKey")}, "QA-TEST-KEY");`,
+  `user_pref(${JSON.stringify(P + "managedStyles")}, ${JSON.stringify(ledger)});`,
+  `user_pref(${JSON.stringify(P + "lastSyncOk")}, ${JSON.stringify(String(Date.now() - 4 * 864e5))});`,
+  `user_pref(${JSON.stringify(P + "installed")}, true);`,
+].join("\n") + "\n");
+'
+
+# 3. Launch, wait for the deferred startup check, then inspect
+npm start          # run in the background; it does not exit
+sleep 40
+ls .scaffold/data/styles/
+```
+
+**Why this works without a Zotero account or a backend:** a fresh profile is not
+signed in, so the outcome is `no-zotero-user` — a _transient_ outcome. But
+`lastSyncOk` is backdated 4 days, past the 3-day window, so `decideAction`
+returns `uninstall` anyway. That exercises the tolerance-exceeded removal path
+with no network call at all.
+
+**Expected:** the ledger style is gone; every other style survives; and
+`.scaffold/profile/prefs.js` shows `managedStyles` reduced to
+`{"v":1,"entries":[]}` — the entry dropped only because removal actually
+succeeded. `lastSyncOk` must be **unchanged**, since a transient outcome does
+not refresh the clock.
+
+**Clean up afterwards:** delete `.scaffold/profile/user.js`, or every later
+`npm start` re-seeds a fake licence and a backdated clock.
+
+---
+
+## 8b. Destructive check against a real profile
+
+Only for a throwaway profile, or a style you have a copy of. Prefer §8 — it
+proves the same thing at no risk.
 
 To exercise removal without a working backend, inject a ledger entry pointing at
 an installed style, then force a lapse:
