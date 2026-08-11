@@ -1,5 +1,5 @@
 import { version } from "../package.json";
-import { customStylesManager } from "./modules/customStyles";
+import { StyleCredentials, customStylesManager } from "./modules/customStyles";
 import {
   runEnforcementCheck,
   scheduleStartupCheck,
@@ -164,14 +164,14 @@ async function onPrefsEvent(type: string, data: { [key: string]: any }) {
   }
 
   // ── Render the live style list after a successful check ───────────────────
-  async function renderActiveStyles(licenseKey: string) {
+  async function renderActiveStyles(creds: StyleCredentials) {
     try {
       await customStylesManager.renderStylesInPrefs(
         doc,
         win,
         stylesContainer,
         statusDiv,
-        licenseKey,
+        creds,
       );
       showUpdateRow();
     } catch (e) {
@@ -188,7 +188,7 @@ async function onPrefsEvent(type: string, data: { [key: string]: any }) {
   // ── Translate an enforcement result into the pane's state ─────────────────
   async function applyOutcome(
     result: Awaited<ReturnType<typeof runEnforcementCheck>>,
-    licenseKey: string,
+    creds: StyleCredentials,
   ) {
     const c = getColors(win);
     if (!result) {
@@ -202,7 +202,7 @@ async function onPrefsEvent(type: string, data: { [key: string]: any }) {
     if (outcome === "active") {
       statusDiv.textContent = getString("status-verified");
       statusDiv.style.color = c.success;
-      await renderActiveStyles(licenseKey);
+      await renderActiveStyles(creds);
       return;
     }
 
@@ -239,7 +239,11 @@ async function onPrefsEvent(type: string, data: { [key: string]: any }) {
   if (saved && zoteroUserId) {
     statusDiv.textContent = getString("status-verifying");
     statusDiv.style.color = getColors(win).neutral;
-    await applyOutcome(await runEnforcementCheck("prefs"), saved.licenseKey);
+    await applyOutcome(await runEnforcementCheck("prefs"), {
+      licenseKey: saved.licenseKey,
+      email: saved.email,
+      zoteroUserId,
+    });
   }
 
   // ── Verify button ─────────────────────────────────────────────────────────
@@ -296,7 +300,7 @@ async function onPrefsEvent(type: string, data: { [key: string]: any }) {
 
       statusDiv.textContent = getString("status-verified");
       statusDiv.style.color = getColors(win).success;
-      await renderActiveStyles(licenseKey);
+      await renderActiveStyles({ licenseKey, email, zoteroUserId });
     } catch (e) {
       csLog("ERROR", "Verify error:", e);
       statusDiv.textContent = getString("status-verify-error");
@@ -308,9 +312,14 @@ async function onPrefsEvent(type: string, data: { [key: string]: any }) {
   updateBtn?.addEventListener("click", async () => {
     const email = emailInput.value.trim();
     const licenseKey = licenseInput.value.trim();
+    // The style endpoints now verify the Zotero account too, so a signed-out
+    // Zotero cannot fetch styles even with valid credentials typed in.
+    const updateZoteroUserId = licenseManager.getZoteroUserId();
 
-    if (!email || !licenseKey) {
-      updateStatus.textContent = getString("status-missing-credentials");
+    if (!email || !licenseKey || !updateZoteroUserId) {
+      updateStatus.textContent = getString(
+        updateZoteroUserId ? "status-missing-credentials" : "status-no-zotero",
+      );
       updateStatus.style.color = getColors(win).error;
       return;
     }
@@ -324,7 +333,7 @@ async function onPrefsEvent(type: string, data: { [key: string]: any }) {
         win,
         stylesContainer,
         statusDiv,
-        licenseKey,
+        { licenseKey, email, zoteroUserId: updateZoteroUserId },
       );
 
       csLog(

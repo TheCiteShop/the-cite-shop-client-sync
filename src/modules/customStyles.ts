@@ -11,6 +11,29 @@ interface StyleData {
   hash: string;
 }
 
+/**
+ * Sent with every style request. The backend applies the same binding checks
+ * it applies at validation — the email must match the order, and the Zotero
+ * account must be the one the license is registered to.
+ *
+ * Passed explicitly rather than read from prefs so the caller controls which
+ * credentials are in play, and so a request can never silently use stale
+ * stored values.
+ */
+export interface StyleCredentials {
+  licenseKey: string;
+  email: string;
+  zoteroUserId: string;
+}
+
+function styleQuery(creds: StyleCredentials): string {
+  return (
+    `license_key=${encodeURIComponent(creds.licenseKey)}` +
+    `&email=${encodeURIComponent(creds.email)}` +
+    `&zotero_user_id=${encodeURIComponent(creds.zoteroUserId)}`
+  );
+}
+
 class CustomStylesManager {
   // ─── Crypto ───────────────────────────────────────────────────
 
@@ -41,10 +64,12 @@ class CustomStylesManager {
    * "you are offline" indistinguishable from "you own nothing", so an offline
    * customer was told to contact support.
    */
-  private async fetchRemoteStyles(licenseKey: string): Promise<StyleData[]> {
+  private async fetchRemoteStyles(
+    creds: StyleCredentials,
+  ): Promise<StyleData[]> {
     csLog("INFO", "Fetching remote styles list");
     const response = await this.fetchWithTimeout(
-      `${getApiBase()}/styles?license_key=${encodeURIComponent(licenseKey)}`,
+      `${getApiBase()}/styles?${styleQuery(creds)}`,
     );
     const styles = response.response as unknown as any[];
     if (!Array.isArray(styles)) {
@@ -61,11 +86,11 @@ class CustomStylesManager {
 
   private async fetchRemoteStyleContent(
     styleId: string,
-    licenseKey: string,
+    creds: StyleCredentials,
     expectedHash: string,
   ): Promise<string> {
     const response = await this.fetchWithTimeout(
-      `${getApiBase()}/styles/${styleId}?license_key=${encodeURIComponent(licenseKey)}`,
+      `${getApiBase()}/styles/${styleId}?${styleQuery(creds)}`,
     );
     const data = response.response as unknown as { content: string };
     if (!data.content) throw new Error("No content in response");
@@ -197,10 +222,10 @@ class CustomStylesManager {
     win: Window,
     container: HTMLElement,
     statusEl: HTMLElement,
-    licenseKey: string,
+    creds: StyleCredentials,
   ): Promise<number> {
     csLog("INFO", "Checking for style updates");
-    const styles = await this.fetchRemoteStyles(licenseKey);
+    const styles = await this.fetchRemoteStyles(creds);
 
     const updatable = styles.filter(
       (s) => this.getStyleStatus(s) === "update-available",
@@ -214,7 +239,7 @@ class CustomStylesManager {
         try {
           const content = await this.fetchRemoteStyleContent(
             s.id,
-            licenseKey,
+            creds,
             s.hash,
           );
           const installed = await this.installStyleToZotero(s.id, content, win);
@@ -232,7 +257,7 @@ class CustomStylesManager {
             win,
             container,
             statusEl,
-            licenseKey,
+            creds,
           );
         } catch (e) {
           btn.textContent = getString("btn-failed");
@@ -466,13 +491,13 @@ class CustomStylesManager {
     win: Window,
     container: HTMLElement,
     statusEl: HTMLElement,
-    licenseKey: string,
+    creds: StyleCredentials,
   ) {
     container.innerHTML = "";
     statusEl.textContent = getString("status-loading-styles");
     statusEl.style.color = getColors(win).neutral;
 
-    const styles = await this.fetchRemoteStyles(licenseKey);
+    const styles = await this.fetchRemoteStyles(creds);
 
     if (styles.length === 0) {
       statusEl.textContent = getString("status-no-styles");
@@ -498,7 +523,7 @@ class CustomStylesManager {
           try {
             const content = await this.fetchRemoteStyleContent(
               s.id,
-              licenseKey,
+              creds,
               s.hash,
             );
             const installed = await this.installStyleToZotero(
