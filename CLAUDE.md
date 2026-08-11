@@ -1,13 +1,13 @@
-# Citation Styler Client Sync — Zotero Plugin
+# The Cite Shop Client Sync — Zotero Plugin
 
 ## Project Overview
 
 This is a Zotero plugin that enables users to install and manage custom citation styles directly within Zotero. The plugin authenticates users via license keys, validates their credentials, and provides an interface for installing and updating purchased custom styles.
 
-**Repository:** https://github.com/POBrien333/citationstyler-client-sync
-**Plugin ID:** `citationstyler-sync@citationstyler.com`
+**Repository:** https://github.com/TheCiteShop/theciteshop-client-sync
+**Plugin ID:** `theciteshop-sync@theciteshop.com`
 **License:** AGPL-3.0-or-later
-**Version:** 1.0.0 (MVP)
+**Version:** see `package.json` (currently 0.0.1)
 
 ## Release Process Notes
 
@@ -22,8 +22,8 @@ This is a Zotero plugin that enables users to install and manage custom citation
 - **Custom Styles Installation**: Browse and install purchased citation styles directly in Zotero
 - **Update Management**: Check for and install style updates
 - **Zotero Integration**: Fully integrated preferences pane in Zotero settings
-- **Multi-device Support**: Activation limits enforced per license
-- **Graceful Degradation**: Cache-based validation allows offline usage
+- **Multi-device Support**: A license is tied to a Zotero account and works on unlimited devices — there are no activation slots
+- **Subscription Enforcement**: Styles are removed when a subscription lapses (see below)
 
 ## Technology Stack
 
@@ -43,12 +43,16 @@ This is a Zotero plugin that enables users to install and manage custom citation
 │   ├── index.ts                 # Plugin initialization entry point
 │   ├── hooks.ts                 # Lifecycle hooks (startup, shutdown, prefs events)
 │   ├── modules/
-│   │   ├── license.ts           # License validation & credential management
+│   │   ├── license.ts           # Validation, outcome taxonomy, tolerance clock
+│   │   ├── styleLedger.ts       # Ownership record + uninstall routine
+│   │   ├── enforcement.ts       # Policy, startup check, daily timer, notification
 │   │   └── customStyles.ts      # Style installation & update logic
 │   └── utils/
 │       ├── ztoolkit.ts          # Zotero toolkit wrapper
 │       ├── locale.ts            # i18n localization strings
-│       ├── prefs.ts             # Preferences utilities
+│       ├── logger.ts            # In-memory log ring (Copy Logs button)
+│       ├── hash.ts              # sha256Hex — must match the backend's hash()
+│       ├── theme.ts             # Light/dark color palette
 │       └── window.ts            # Window management utilities
 │
 ├── addon/
@@ -60,7 +64,10 @@ This is a Zotero plugin that enables users to install and manage custom citation
 │   └── locale/                  # i18n translation files
 │
 ├── test/
-│   └── startup.test.ts          # Mocha test suite
+│   ├── startup.test.ts          # Smoke test
+│   ├── enforcement.test.ts      # classifyResponse + decideAction tables
+│   ├── ledger.test.ts           # Ledger round-trip, corruption, removal
+│   └── titleclash.test.ts       # Pins Zotero install overwrite behavior
 │
 ├── zotero-plugin.config.ts      # Build configuration
 ├── package.json                 # Dependencies & config
@@ -76,18 +83,19 @@ Handles license validation, credential storage, and Zotero account integration.
 
 **Key Functions:**
 
-- `validate(credentials, forceRefresh)` — Validate email + license key against backend
-- `saveCredentials(email, licenseKey)` — Store encrypted credentials in Zotero prefs
-- `loadCredentials()` — Retrieve stored credentials
-- `clearCredentials()` — Remove stored credentials
+- `classifyResponse(status, body)` — **Pure**, exported, unit-tested. Maps an HTTP response to a `LicenseOutcome`. Every decision that can delete a customer's files runs through here.
+- `validateAuthoritative(credentials)` — Always hits the network; there is no cache path
+- `getEntitlementSnapshot()` — Pure pref read of the last known entitled style list
+- `getLastSyncOk()` / `setLastSyncOk()` — The tolerance clock
+- `saveCredentials(email, licenseKey)` / `loadCredentials()` / `clearCredentials()`
 - `getZoteroUserId()` — Get logged-in Zotero account ID
-- `isCacheExpiringSoon()` — Check if validation cache is expiring
+- `getApiBase()` — API base URL, overridable via a dev-only pref
 
 **Features:**
 
-- Cache-based validation for offline support
-- Grace period handling
-- Device activation limit enforcement
+- Requests use `successCodes: false`, so the promise settling is the discriminator: resolved ⇒ we reached the server; rejected ⇒ we did not
+- `errorDelayMax: 0` disables Zotero's default 1-hour 5xx retry loop
+- Legacy backend responses without a `status` field degrade to `server-error`, never `expired` — an old backend must not be able to trigger a mass uninstall
 
 ### Custom Styles Module (`src/modules/customStyles.ts`)
 
@@ -95,9 +103,40 @@ Manages style installation, rendering, and updates.
 
 **Key Functions:**
 
-- `renderStylesInPrefs(doc, container, statusDiv, validationResult, licenseKey)` — Display available styles in preferences
-- `checkAndInstallUpdates(doc, container, statusDiv, licenseKey)` — Fetch and install style updates
-- `installStyle(styleName, styleContent)` — Install a style to Zotero
+- `renderStylesInPrefs(doc, win, container, statusEl, creds)` — Display available styles; throws if the list cannot be fetched
+- `renderInstalledFromLedger(doc, container)` — Read-only list used during the offline tolerance window
+- `checkAndInstallUpdates(doc, win, container, statusEl, creds)` — Fetch and install style updates
+- `installStyleToZotero(shopId, styleContent, win)` — Install a style and record it in the ownership ledger. Parses the CSL `<id>`/`<title>` from the file itself; returns `false` if the user declined to replace an existing style.
+
+`creds` is a `StyleCredentials` (`licenseKey`, `email`, `zoteroUserId`) — the style endpoints verify all three, not just the key.
+
+**An ID collision is confirmed before installing** and recorded as `preexisting: true`. Zotero derives the filename from the style id, so installing over the same id overwrites the customer's file.
+
+A style with the same **title** under a different id is _not_ a collision — Zotero leaves it installed. `_install` appears to delete it (`style.js` ~429 finds it by title, ~515 calls `existingFile.remove(false)`), but that line cannot fire: it assigns `existingStyle.file`, and `Zotero.Style` has no `.file` property — only `.path` and `.fileName`. Dead code from the nsIFile era. Verified empirically in `test/titleclash.test.ts`; if Zotero ever repairs it that test fails and a warning should be reinstated.
+
+### Style Ledger (`src/modules/styleLedger.ts`)
+
+Provenance for removal. Zotero keeps none, so without this an uninstall would delete styles the customer installed themselves. Two prefs, both deliberately surviving a lapse — they are needed precisely when the entitlement snapshot has been cleared:
+
+- `extensions.theciteshop.managedStyles` — what this plugin installed
+- `extensions.theciteshop.styleHashes` — `{ shopId: sha256 }` of every style the server has served
+
+**A matching style id proves nothing.** Shop styles use the same `http://www.zotero.org/styles/` namespace as the public repository, so a customer may legitimately hold a different style under one of our ids. Only the content hash proves ownership.
+
+- `read()` never throws — a throw would take down the startup check
+- `record()` upserts by `styleID` and never flips `preexisting` back to false
+- `prune()` is lazy (Zotero has no notifier event for styles) and its styles-loaded probe gates the **whole** prune, not each entry
+- `removeAll(reason)` — ledger entries only
+- `removeUntrackedMatches(reason)` — files we never installed but which hash to a style we served (catches a `.csl` hand-copied between machines); a same-id style with different contents is skipped
+- `reason` is mandatory throughout, so every deletion is logged with a justification
+
+### Enforcement (`src/modules/enforcement.ts`)
+
+- `decideAction(outcome, lastSyncOk, now, ledgerCount, tolerance)` — **Pure** and unit-tested
+- `removeAllShopStyles(reason)` — **the single removal entry point**: ledger + hash-verified untracked. Every path (background check, Verify, logout, missing credentials) goes through it so the two can never drift apart
+- `enforceAuthoritativeRefusal(outcome)` — used by the Verify button, which validates typed values directly and so bypasses `runEnforcementCheck`
+- `runEnforcementCheck(trigger)` — re-entrancy guarded via `addon.data.license.enforcing`
+- `startEnforcementTimer()` — chained `setTimeout`, called only from `onStartup` (never per-window)
 
 ## Lifecycle Hooks (`src/hooks.ts`)
 
@@ -132,8 +171,8 @@ Handles the preferences pane UI interactions:
 **Status Colors:**
 
 - Green (#28a745): Verified license
-- Orange (#fd7e14): Grace period or expiring soon
-- Red (#dc3545): Errors (invalid email, missing credentials, validation failed)
+- Orange (#fd7e14): Within the offline tolerance window
+- Red (#dc3545): Errors (invalid email, missing credentials, validation failed, styles removed)
 - Gray (#888): In-progress or neutral
 
 ## Build & Development
@@ -162,11 +201,11 @@ npm run update-deps    # Update dependencies
 
 ```json
 "config": {
-  "addonName": "Citation Styler Client Sync",
-  "addonID": "citationstyler-sync@citationstyler.com",
-  "addonRef": "citationstyler-sync",           // Namespace for chrome://
-  "addonInstance": "CitationStylerSync",      // Global Zotero object instance
-  "prefsPrefix": "extensions.zotero.citationstyler-sync"  // Prefs storage prefix
+  "addonName": "The Cite Shop Client Sync",
+  "addonID": "theciteshop-sync@theciteshop.com",
+  "addonRef": "theciteshop-sync",           // Namespace for chrome://
+  "addonInstance": "TheCiteShopSync",      // Global Zotero object instance
+  "prefsPrefix": "extensions.zotero.theciteshop-sync"  // Prefs storage prefix
 }
 ```
 
@@ -181,7 +220,7 @@ npm run update-deps    # Update dependencies
 
 When the plugin is first installed:
 
-1. Checks `extensions.citationstyler.installed` preference
+1. Checks `extensions.theciteshop.installed` preference
 2. If not set, opens the preferences pane automatically
 3. User enters email and license key
 4. Plugin validates against backend
@@ -227,8 +266,13 @@ Localization strings are stored in `addon/locale/` and referenced via `getString
 - `email-placeholder`, `license-placeholder` — Input placeholders
 - `status-verifying`, `status-verified`, `status-verification-failed` — Status messages
 - `status-no-zotero` — Zotero account not logged in
-- `status-grace-period` — License in grace period
+- `status-offline-tolerance` — Server unreachable, `{$days}` remaining before removal
+- `status-offline-removed` — Removed after the tolerance window lapsed
+- `status-subscription-expired` — Subscription ended; styles removed
+- `notify-removed-*` — Sticky removal popup
 - `status-all-uptodate` — No updates available
+
+> New keys read via `getString()` **must** go in `addon.ftl` or `customStyles.ftl` — `src/utils/locale.ts` registers only those two with the `Localization` object. `preferences.ftl` serves `data-l10n-id` attributes only. Keep `en-US` and `de-DE` key-for-key identical, and rebuild to regenerate `typings/i10n.d.ts` before `getString` will accept a new key.
 
 ## Error Handling
 
@@ -236,7 +280,8 @@ Localization strings are stored in `addon/locale/` and referenced via `getString
 
 - "Please log in to your Zotero account" → User must sign in at zotero.org
 - "Email does not match this license key" → Email/key mismatch
-- "Activation limit reached" → Too many devices for this license
+- "Your subscription has expired" → Styles have been removed; renew to restore
+- "Your styles will be removed in N day(s)" → No successful license check within the tolerance window
 
 **Developer Error Handling:**
 
@@ -255,23 +300,74 @@ Localization strings are stored in `addon/locale/` and referenced via `getString
 
 ## Testing
 
-Tests are written in Mocha + Chai in `test/startup.test.ts`.
+Tests are written in Mocha + Chai and run inside a real Zotero instance.
+
+```bash
+npx zotero-plugin test --exit-on-finish   # 41 passing
+```
+
+Plain `npm test` stays in watch mode and never exits on its own.
 
 **Key Test Requirement:**
 
-- Tests wait for plugin initialization via: `Zotero.MyCustomStyles.data.initialized`
+- Tests wait for plugin initialization via: `Zotero.TheCiteShopSync.data.initialized`
+
+Test files:
+
+- `test/startup.test.ts` — smoke test
+- `test/enforcement.test.ts` — table-driven `classifyResponse` and `decideAction`
+- `test/ledger.test.ts` — ledger round-trip, corruption handling, removal, and the hash sweep (installs a real CSL and asserts it is removed on a hash match and **spared** on a mismatch)
+
+The two pure functions carry the real risk: they decide whether a customer's
+files get deleted. Prefer extending those tables over integration tests.
+
+## Subscription Enforcement
+
+Styles are removed when a subscription lapses. The policy:
+
+| Outcome                                                            | Action                                            |
+| ------------------------------------------------------------------ | ------------------------------------------------- |
+| `active`                                                           | keep, refresh `lastSyncOk`, reconcile entitlement |
+| `expired` / `invalid-credentials`                                  | uninstall immediately                             |
+| `rate-limited` / `server-error` / `unreachable` / `no-zotero-user` | keep; the 3-day tolerance clock runs              |
+
+Checks run at Zotero startup (deferred 15s, never awaited), on a daily chained
+`setTimeout`, and when the prefs pane opens. Removal also happens on logout and
+on plugin uninstall — without those, either is a bypass, since no further check
+could ever run.
+
+**Backend contract.** `POST /license/validate` must return HTTP 200 for every
+entitlement _decision_, with `status` (`active`/`expired`/`invalid`) and
+`authoritative: true`. Non-2xx is reserved for infrastructure failures and 429.
+`authoritative` is the load-bearing field: without it the client classifies the
+response as `server-error` and never enforces, which is what stops a WAF or CDN
+403 being mistaken for a revocation.
+
+`GET /styles` and `/styles/{id}` must 403 lapsed subscriptions, or the pane
+would re-download what was just removed. Both also require `email` and
+`zotero_user_id` alongside `license_key` and apply the same binding as
+validation — the endpoint URLs are public (AGPL source, and the XPI is a zip),
+so key secrecy alone protected the paid CSL files.
+
+**Plugin and backend must ship together.** An older plugin build does not send
+the new style-endpoint parameters and will receive 403s.
+
+**Dev-only prefs**, all gated on `__env__ === "development"`:
+`extensions.theciteshop.debug.{forceOutcome,checkIntervalMs,toleranceMs,apiBase}`.
+The gating is mandatory — a debug pref surviving into a release build _is_ the
+bypass.
 
 ## Known Limitations & Notes
 
 - Plugin requires active Zotero account (zotero.org login)
-- License validation requires internet connection (unless cached)
+- License validation requires a periodic internet connection; 3 days without a successful check removes installed styles
 - Email validation is basic regex-based
-- Cache expiration is configurable in license module
+- `Zotero.Styles` is typed `any` in `zotero-types`, so removal code gets **no compile-time checking**. Note in particular that `Zotero.Styles.get()` returns `false` (not `null`) on a miss, and needs `skipMappings=true` or it may return a different style than requested
 - Style installation depends on Zotero's style management API
 
 ## Author & Support
 
-**Author:** Citation Styler
-**Email:** info@citationstyler.com
-**Website:** https://citationstyler.com
-**Issues:** https://github.com/POBrien333/citationstyler-client-sync/issues
+**Author:** The Cite Shop
+**Email:** info@theciteshop.com
+**Website:** https://theciteshop.com
+**Issues:** https://github.com/TheCiteShop/theciteshop-client-sync/issues

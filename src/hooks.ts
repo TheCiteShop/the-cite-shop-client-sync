@@ -1,6 +1,15 @@
 import { version } from "../package.json";
-import { customStylesManager } from "./modules/customStyles";
+import { StyleCredentials, customStylesManager } from "./modules/customStyles";
+import {
+  enforceAuthoritativeRefusal,
+  removeAllShopStyles,
+  runEnforcementCheck,
+  scheduleStartupCheck,
+  startEnforcementTimer,
+  stopEnforcementTimer,
+} from "./modules/enforcement";
 import { licenseManager } from "./modules/license";
+import { styleLedger } from "./modules/styleLedger";
 import { getString, initLocale } from "./utils/locale";
 import { csLog, getFormattedLogs } from "./utils/logger";
 import { getColors, isDarkMode } from "./utils/theme";
@@ -17,7 +26,9 @@ async function onStartup() {
 
   const mainWin = Zotero.getMainWindows()[0] as unknown as Window;
   const dark = mainWin ? isDarkMode(mainWin) : false;
-  const icon = dark ? "citation-styler-favicon-96-white.png" : "favicon.png";
+  const icon = dark
+    ? "the-cite-shop-client-sync-favicon-96-white.png"
+    : "the-cite-shop-client-sync-favicon-96.png";
 
   Zotero.PreferencePanes.register({
     pluginID: addon.data.config.addonID,
@@ -31,17 +42,22 @@ async function onStartup() {
   );
 
   // ── Open prefs pane on first install ──────────────────────────
-  const isFirstInstall = !Zotero.Prefs.get(
-    "extensions.citationstyler.installed",
-  );
+  const isFirstInstall = !Zotero.Prefs.get("extensions.theciteshop.installed");
   if (isFirstInstall) {
-    Zotero.Prefs.set("extensions.citationstyler.installed", true);
+    Zotero.Prefs.set("extensions.theciteshop.installed", true);
     await new Promise((resolve) => setTimeout(resolve, 1000));
     Zotero.Utilities.Internal.openPreferences(addon.data.config.addonRef);
   }
 
   csLog("INFO", `Plugin started — version ${version}`);
   addon.data.initialized = true;
+
+  // Subscription enforcement. Deliberately not awaited: onStartup is awaited
+  // by bootstrap.js, so blocking here would stall plugin startup behind a
+  // network round trip.
+  licenseManager.migrate();
+  scheduleStartupCheck();
+  startEnforcementTimer();
 }
 
 async function onMainWindowLoad(win: _ZoteroTypes.MainWindow): Promise<void> {
@@ -58,20 +74,14 @@ async function onMainWindowUnload(win: Window): Promise<void> {
 }
 
 function onShutdown(): void {
+  // First: the timer callback dereferences addon.data, which this function
+  // goes on to tear down.
+  stopEnforcementTimer();
   ztoolkit.unregisterAll();
   addon.data.dialog?.window?.close();
   addon.data.alive = false;
   // @ts-expect-error - Plugin instance is not typed
   delete Zotero[addon.data.config.addonInstance];
-}
-
-async function onNotify(
-  event: string,
-  type: string,
-  ids: Array<string | number>,
-  extraData: { [key: string]: any },
-) {
-  ztoolkit.log("notify", event, type, ids, extraData);
 }
 
 async function onPrefsEvent(type: string, data: { [key: string]: any }) {
@@ -82,29 +92,27 @@ async function onPrefsEvent(type: string, data: { [key: string]: any }) {
   const win: Window = data.window;
   const doc: Document = win.document;
 
-  const versionEl = doc.getElementById("prefs-version") as HTMLElement;
+  // Zotero renders every plugin's preference pane into one shared document, so
+  // element IDs are namespaced with the addon ref. Unprefixed IDs collide with
+  // other plugins — notably an older build of this one still installed.
+  const byId = <T extends HTMLElement = HTMLElement>(id: string) =>
+    doc.getElementById(`${addon.data.config.addonRef}-${id}`) as T;
+
+  const versionEl = byId("prefs-version");
   if (versionEl) {
     versionEl.textContent = `v${version}`;
     versionEl.style.color = getColors(win).mutedText;
   }
 
-  const verifyBtn = doc.getElementById("prefs-verify-btn") as HTMLElement;
-  const emailInput = doc.getElementById(
-    "prefs-email-input",
-  ) as HTMLInputElement;
-  const licenseInput = doc.getElementById(
-    "prefs-license-input",
-  ) as HTMLInputElement;
-  const statusDiv = doc.getElementById("prefs-status") as HTMLElement;
-  const stylesContainer = doc.getElementById(
-    "prefs-styles-container",
-  ) as HTMLElement;
-  const logoutBtn = doc.getElementById("prefs-logout-btn") as HTMLElement;
-  const updateRow = doc.getElementById("prefs-update-row") as HTMLElement;
-  const updateBtn = doc.getElementById(
-    "prefs-check-updates-btn",
-  ) as HTMLElement;
-  const updateStatus = doc.getElementById("prefs-update-status") as HTMLElement;
+  const verifyBtn = byId("prefs-verify-btn");
+  const emailInput = byId<HTMLInputElement>("prefs-email-input");
+  const licenseInput = byId<HTMLInputElement>("prefs-license-input");
+  const statusDiv = byId("prefs-status");
+  const stylesContainer = byId("prefs-styles-container");
+  const logoutBtn = byId("prefs-logout-btn");
+  const updateRow = byId("prefs-update-row");
+  const updateBtn = byId("prefs-check-updates-btn");
+  const updateStatus = byId("prefs-update-status");
 
   if (
     !verifyBtn ||
@@ -142,7 +150,7 @@ async function onPrefsEvent(type: string, data: { [key: string]: any }) {
   // ── Pre-fill saved credentials ────────────────────────────────────────────
   const saved = licenseManager.loadCredentials();
   if (saved) {
-    csLog("INFO", "Saved credentials found — attempting cache validation");
+    csLog("INFO", "Saved credentials found — running license check");
     emailInput.value = saved.email;
     licenseInput.value = saved.licenseKey;
   } else {
@@ -157,39 +165,87 @@ async function onPrefsEvent(type: string, data: { [key: string]: any }) {
     statusDiv.style.color = getColors(win).error;
   }
 
-  // ── Load from cache if credentials already saved ──────────────────────────
-  if (saved && zoteroUserId) {
+  // ── Render the live style list after a successful check ───────────────────
+  async function renderActiveStyles(creds: StyleCredentials) {
     try {
-      const cached = await licenseManager.validate(
-        { email: saved.email, licenseKey: saved.licenseKey, zoteroUserId },
-        false,
+      await customStylesManager.renderStylesInPrefs(
+        doc,
+        win,
+        stylesContainer,
+        statusDiv,
+        creds,
       );
-      if (cached.valid) {
-        if (cached.fromGrace) {
-          statusDiv.textContent = getString("status-grace-period");
-          statusDiv.style.color = getColors(win).warning;
-        } else if (licenseManager.isCacheExpiringSoon()) {
-          statusDiv.textContent = getString("status-verified-soon");
-          statusDiv.style.color = getColors(win).warning;
-        } else {
-          statusDiv.textContent = getString("status-verified");
-          statusDiv.style.color = getColors(win).success;
-        }
-        await customStylesManager.renderStylesInPrefs(
-          doc,
-          win,
-          stylesContainer,
-          statusDiv,
-          cached,
-          saved.licenseKey,
-        );
-        showUpdateRow();
-      }
+      showUpdateRow();
     } catch (e) {
-      csLog("ERROR", "Cache load error:", e);
-      statusDiv.textContent = getString("status-cache-error");
+      // The license is fine but the style list did not load. Show what is
+      // installed rather than the misleading "contact support" message.
+      csLog("ERROR", "Style list fetch failed:", e);
+      statusDiv.textContent = getString("status-server-unreachable");
       statusDiv.style.color = getColors(win).error;
+      customStylesManager.renderInstalledFromLedger(doc, stylesContainer);
+      hideUpdateRow();
     }
+  }
+
+  // ── Translate an enforcement result into the pane's state ─────────────────
+  async function applyOutcome(
+    result: Awaited<ReturnType<typeof runEnforcementCheck>>,
+    creds: StyleCredentials,
+  ) {
+    const c = getColors(win);
+    if (!result) {
+      statusDiv.textContent = getString("status-verify-error");
+      statusDiv.style.color = c.error;
+      return;
+    }
+
+    const { outcome, decision, validation } = result;
+
+    if (outcome === "active") {
+      statusDiv.textContent = getString("status-verified");
+      statusDiv.style.color = c.success;
+      await renderActiveStyles(creds);
+      return;
+    }
+
+    stylesContainer.innerHTML = "";
+    hideUpdateRow();
+
+    // Authoritative refusal — the styles have just been removed, so say why.
+    if (outcome === "expired" || outcome === "invalid-credentials") {
+      statusDiv.textContent =
+        validation?.reasonText ??
+        getString(validation?.reasonKey ?? "status-validation-failed");
+      statusDiv.style.color = c.error;
+      return;
+    }
+
+    // Transient failure: either the tolerance window just ran out, or it is
+    // still running and the customer keeps their styles for now.
+    if (decision.action === "uninstall") {
+      statusDiv.textContent = getString("status-offline-removed", {
+        args: { days: decision.daysElapsed },
+      });
+      statusDiv.style.color = c.error;
+      return;
+    }
+
+    statusDiv.textContent = getString("status-offline-tolerance", {
+      args: { days: decision.daysRemaining },
+    });
+    statusDiv.style.color = c.warning;
+    customStylesManager.renderInstalledFromLedger(doc, stylesContainer);
+  }
+
+  // ── Real license check on pane open ───────────────────────────────────────
+  if (saved && zoteroUserId) {
+    statusDiv.textContent = getString("status-verifying");
+    statusDiv.style.color = getColors(win).neutral;
+    await applyOutcome(await runEnforcementCheck("prefs"), {
+      licenseKey: saved.licenseKey,
+      email: saved.email,
+      zoteroUserId,
+    });
   }
 
   // ── Verify button ─────────────────────────────────────────────────────────
@@ -222,32 +278,49 @@ async function onPrefsEvent(type: string, data: { [key: string]: any }) {
     hideUpdateRow();
 
     try {
-      const result = await licenseManager.validate(
-        { email, licenseKey, zoteroUserId },
-        true,
-      );
+      // Validate the typed values directly rather than going through
+      // enforcement: a mistyped key must not delete the styles a valid
+      // saved license installed. Credentials are only persisted on success,
+      // so enforcement never runs against an unverified key.
+      const result = await licenseManager.validateAuthoritative({
+        email,
+        licenseKey,
+        zoteroUserId,
+      });
 
-      if (!result.valid) {
-        csLog("WARN", `Verification failed: ${result.reason}`);
+      if (result.outcome !== "active") {
+        csLog("WARN", `Verification failed: ${result.outcome}`);
         statusDiv.textContent =
-          result.reason ?? getString("status-validation-failed");
+          result.reasonText ??
+          getString(result.reasonKey ?? "status-validation-failed");
         statusDiv.style.color = getColors(win).error;
+
+        // An authoritative refusal about credentials we had already saved and
+        // verified is just as binding here as during a background check —
+        // otherwise the customer is told their license is dead while the
+        // styles stay installed.
+        //
+        // Gated on the typed values matching the saved ones so the typo
+        // protection above still holds: entering a wrong key must never
+        // delete the styles a working license installed.
+        const savedNow = licenseManager.loadCredentials();
+        const isSavedCredentials =
+          !!savedNow &&
+          savedNow.licenseKey === licenseKey &&
+          savedNow.email.toLowerCase() === email.toLowerCase();
+
+        if (isSavedCredentials) {
+          await enforceAuthoritativeRefusal(result.outcome);
+        }
         return;
       }
 
       csLog("INFO", "Credentials saved after successful verification");
       licenseManager.saveCredentials(email, licenseKey);
 
-      await customStylesManager.renderStylesInPrefs(
-        doc,
-        win,
-        stylesContainer,
-        statusDiv,
-        result,
-        licenseKey,
-      );
-
-      showUpdateRow();
+      statusDiv.textContent = getString("status-verified");
+      statusDiv.style.color = getColors(win).success;
+      await renderActiveStyles({ licenseKey, email, zoteroUserId });
     } catch (e) {
       csLog("ERROR", "Verify error:", e);
       statusDiv.textContent = getString("status-verify-error");
@@ -259,9 +332,14 @@ async function onPrefsEvent(type: string, data: { [key: string]: any }) {
   updateBtn?.addEventListener("click", async () => {
     const email = emailInput.value.trim();
     const licenseKey = licenseInput.value.trim();
+    // The style endpoints now verify the Zotero account too, so a signed-out
+    // Zotero cannot fetch styles even with valid credentials typed in.
+    const updateZoteroUserId = licenseManager.getZoteroUserId();
 
-    if (!email || !licenseKey) {
-      updateStatus.textContent = getString("status-missing-credentials");
+    if (!email || !licenseKey || !updateZoteroUserId) {
+      updateStatus.textContent = getString(
+        updateZoteroUserId ? "status-missing-credentials" : "status-no-zotero",
+      );
       updateStatus.style.color = getColors(win).error;
       return;
     }
@@ -275,7 +353,7 @@ async function onPrefsEvent(type: string, data: { [key: string]: any }) {
         win,
         stylesContainer,
         statusDiv,
-        licenseKey,
+        { licenseKey, email, zoteroUserId: updateZoteroUserId },
       );
 
       csLog(
@@ -298,7 +376,23 @@ async function onPrefsEvent(type: string, data: { [key: string]: any }) {
   });
 
   // ── Clear Credentials button ──────────────────────────────────────────────
-  logoutBtn?.addEventListener("click", () => {
+  logoutBtn?.addEventListener("click", async () => {
+    // Managed styles must go with the credentials. Otherwise clearing them is
+    // a two-click bypass: with no credentials stored, no future check can run
+    // and the purchased styles stay installed forever.
+    const managed = styleLedger.count();
+    if (managed > 0) {
+      const proceed = win.confirm(
+        getString("status-logout-will-remove", { args: { count: managed } }),
+      );
+      if (!proceed) {
+        csLog("INFO", "User cancelled credential clearing");
+        return;
+      }
+      const report = await removeAllShopStyles("logout");
+      csLog("INFO", `Logout removed ${report.removed.length} style(s)`);
+    }
+
     csLog("INFO", "Credentials cleared by user");
     licenseManager.clearCredentials();
     emailInput.value = "";
@@ -310,8 +404,8 @@ async function onPrefsEvent(type: string, data: { [key: string]: any }) {
   });
 
   // ── Copy Logs button ──────────────────────────────────────────────────────
-  const copyLogsBtn = doc.getElementById("prefs-copy-logs-btn") as HTMLElement;
-  const logsStatusDiv = doc.getElementById("prefs-logs-status") as HTMLElement;
+  const copyLogsBtn = byId("prefs-copy-logs-btn");
+  const logsStatusDiv = byId("prefs-logs-status");
 
   copyLogsBtn?.addEventListener("click", async () => {
     const text = getFormattedLogs();
@@ -350,7 +444,6 @@ export default {
   onShutdown,
   onMainWindowLoad,
   onMainWindowUnload,
-  onNotify,
   onPrefsEvent,
   onShortcuts,
   onDialogEvents,

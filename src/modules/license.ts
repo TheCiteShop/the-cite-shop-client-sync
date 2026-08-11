@@ -1,15 +1,34 @@
 import { csLog } from "../utils/logger";
+import { FluentMessageId } from "../../typings/i10n";
 
-const PREF_LICENSE_KEY = "extensions.citationstyler.licenseKey";
-const PREF_EMAIL = "extensions.citationstyler.email";
-const PREF_ZOTERO_USER_ID = "extensions.citationstyler.zoteroUserId";
-const PREF_CACHE_VALID = "extensions.citationstyler.cacheValid";
-const PREF_CACHE_EXPIRY = "extensions.citationstyler.cacheExpiry";
+const PREF_LICENSE_KEY = "extensions.theciteshop.licenseKey";
+const PREF_EMAIL = "extensions.theciteshop.email";
+/**
+ * Last known entitled style list. The pref *string* still says "cacheValid"
+ * for continuity, but this is no longer a TTL cache — there is no TTL any
+ * more. It exists only so the prefs pane can render during the offline
+ * tolerance window. The tolerance clock itself lives in PREF_LAST_SYNC_OK.
+ */
+const PREF_ENTITLEMENT = "extensions.theciteshop.cacheValid";
+/** Epoch ms of the last *authoritative* successful validation. */
+const PREF_LAST_SYNC_OK = "extensions.theciteshop.lastSyncOk";
+/** Obsolete: the 14-day TTL that the subscription model replaced. */
+const PREF_OBSOLETE_CACHE_EXPIRY = "extensions.theciteshop.cacheExpiry";
 
-const CACHE_TTL_MS = 14 * 24 * 60 * 60 * 1000;
-const GRACE_PERIOD_MS = 7 * 24 * 60 * 60 * 1000;
-const WARN_BEFORE_MS = 3 * 24 * 60 * 60 * 1000;
 const REQUEST_TIMEOUT = 15_000;
+const DEFAULT_API_BASE = "https://theciteshop.com/wp-json/theciteshop/v1";
+
+/**
+ * Dev-only override so tests can point at a local stub server. Gated on
+ * __env__ so a production build cannot be coerced into a different backend.
+ */
+export function getApiBase(): string {
+  if (__env__ === "development") {
+    const override = Zotero.Prefs.get("extensions.theciteshop.debug.apiBase");
+    if (typeof override === "string" && override) return override;
+  }
+  return DEFAULT_API_BASE;
+}
 
 export interface LicenseCredentials {
   email: string;
@@ -17,11 +36,80 @@ export interface LicenseCredentials {
   zoteroUserId: string;
 }
 
-export interface LicenseStatus {
-  valid: boolean;
-  reason?: string;
+export type LicenseOutcome =
+  | "active"
+  | "expired"
+  | "invalid-credentials"
+  | "rate-limited"
+  | "server-error"
+  | "unreachable"
+  | "no-zotero-user";
+
+export interface ValidationResult {
+  outcome: LicenseOutcome;
+  /** Entitled style ids, only when outcome is "active". */
   styles?: string[];
-  fromGrace?: boolean;
+  /** Server-supplied human-readable message; preferred when present. */
+  reasonText?: string;
+  /** Client-side fallback message key. */
+  reasonKey?: FluentMessageId;
+}
+
+/**
+ * Pure, I/O-free mapping from an HTTP response to an outcome.
+ *
+ * This is the highest-risk logic in the plugin — it decides whether a
+ * customer's files get deleted — so it is exported and unit-tested rather
+ * than buried in a catch block.
+ */
+export function classifyResponse(status: number, body: any): LicenseOutcome {
+  if (status === 429) return "rate-limited";
+  if (status >= 500) return "server-error";
+  if (!body || typeof body !== "object") return "server-error";
+
+  // Current contract: the server explicitly asserts it looked this up. The
+  // `authoritative` flag is what distinguishes a real entitlement decision
+  // from a WAF/CDN/proxy response we must not act on.
+  if (body.authoritative === true) {
+    switch (body.status) {
+      case "active":
+        return "active";
+      case "expired":
+        return "expired";
+      case "invalid":
+        return "invalid-credentials";
+      default:
+        return "server-error";
+    }
+  }
+
+  // Legacy backend with no `status` field. Deliberately asymmetric: an old
+  // server may still grant access, but must never be able to trigger a mass
+  // uninstall. `valid: false` therefore degrades to server-error, not expired.
+  if (body.status === undefined) {
+    return body.valid === true ? "active" : "server-error";
+  }
+
+  return "server-error";
+}
+
+function reasonKeyFor(outcome: LicenseOutcome): FluentMessageId | undefined {
+  switch (outcome) {
+    case "expired":
+      return "status-subscription-expired";
+    case "invalid-credentials":
+      return "status-license-invalid";
+    case "rate-limited":
+      return "status-rate-limited";
+    case "server-error":
+      return "status-server-error";
+    case "unreachable":
+      return "status-server-unreachable";
+    case "no-zotero-user":
+      return "status-no-zotero";
+    default:
+      return undefined;
+  }
 }
 
 export class LicenseManager {
@@ -52,180 +140,168 @@ export class LicenseManager {
     return { email, licenseKey };
   }
 
+  /**
+   * Clears credentials and all license state. Deliberately does NOT touch the
+   * style ledger — that is cleared by styleLedger.removeAll() as a consequence
+   * of successful removal, so a partial failure leaves retryable entries.
+   */
   clearCredentials() {
     Zotero.Prefs.clear(PREF_EMAIL);
     Zotero.Prefs.clear(PREF_LICENSE_KEY);
-    Zotero.Prefs.clear(PREF_CACHE_VALID);
-    Zotero.Prefs.clear(PREF_CACHE_EXPIRY);
+    this.clearEntitlement();
+    this.clearLastSyncOk();
   }
 
-  // ─── Cache ────────────────────────────────────────────────────
+  // ─── Tolerance clock ──────────────────────────────────────────
 
-  private setCacheValid(styles: string[]) {
-    Zotero.Prefs.set(PREF_CACHE_VALID, JSON.stringify(styles));
-    Zotero.Prefs.set(PREF_CACHE_EXPIRY, String(Date.now() + CACHE_TTL_MS));
+  getLastSyncOk(): number | null {
+    const raw = Number(Zotero.Prefs.get(PREF_LAST_SYNC_OK));
+    if (!raw || Number.isNaN(raw)) return null;
+    // A future timestamp (clock skew, timezone edit) would otherwise freeze
+    // the tolerance clock indefinitely.
+    if (raw > Date.now()) {
+      csLog("WARN", "lastSyncOk is in the future — clamping to now");
+      this.setLastSyncOk(Date.now());
+      return Date.now();
+    }
+    return raw;
   }
 
-  private getCachedStatus(): LicenseStatus | null {
+  setLastSyncOk(ms: number) {
+    Zotero.Prefs.set(PREF_LAST_SYNC_OK, String(ms));
+  }
+
+  clearLastSyncOk() {
+    Zotero.Prefs.clear(PREF_LAST_SYNC_OK);
+  }
+
+  // ─── Entitlement snapshot ─────────────────────────────────────
+
+  /** Pure pref read — no TTL, no network. Renders the pane during tolerance. */
+  getEntitlementSnapshot(): string[] | null {
     try {
-      const expiry = Number(Zotero.Prefs.get(PREF_CACHE_EXPIRY));
-      const cached = Zotero.Prefs.get(PREF_CACHE_VALID) as string;
-      if (!expiry || !cached) return null;
-      if (Date.now() > expiry) return null;
-      return { valid: true, styles: JSON.parse(cached) };
+      const raw = Zotero.Prefs.get(PREF_ENTITLEMENT);
+      if (typeof raw !== "string" || !raw) return null;
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : null;
     } catch (e) {
+      csLog("ERROR", "Entitlement snapshot unreadable:", e);
       return null;
     }
   }
 
-  private getCachedStatusWithGrace(): LicenseStatus | null {
+  setEntitlement(styles: string[]) {
+    Zotero.Prefs.set(PREF_ENTITLEMENT, JSON.stringify(styles));
+  }
+
+  clearEntitlement() {
+    Zotero.Prefs.clear(PREF_ENTITLEMENT);
+  }
+
+  /** One-shot cleanup of prefs the subscription model retired. */
+  migrate() {
     try {
-      const expiry = Number(Zotero.Prefs.get(PREF_CACHE_EXPIRY));
-      const cached = Zotero.Prefs.get(PREF_CACHE_VALID) as string;
-      if (!expiry || !cached) return null;
-      if (Date.now() > expiry + GRACE_PERIOD_MS) return null;
-      const isInGrace = Date.now() > expiry;
-      return { valid: true, styles: JSON.parse(cached), fromGrace: isInGrace };
+      if (Zotero.Prefs.get(PREF_OBSOLETE_CACHE_EXPIRY) !== undefined) {
+        Zotero.Prefs.clear(PREF_OBSOLETE_CACHE_EXPIRY);
+        csLog("INFO", "Cleared obsolete cacheExpiry pref");
+      }
     } catch (e) {
-      return null;
+      csLog("WARN", "Pref migration skipped:", e);
     }
-  }
-
-  isCacheExpiringSoon(): boolean {
-    const expiry = Number(Zotero.Prefs.get(PREF_CACHE_EXPIRY));
-    if (!expiry) return true;
-    return Date.now() > expiry - WARN_BEFORE_MS;
-  }
-
-  isCacheInGrace(): boolean {
-    const expiry = Number(Zotero.Prefs.get(PREF_CACHE_EXPIRY));
-    if (!expiry) return false;
-    const now = Date.now();
-    return now > expiry && now <= expiry + GRACE_PERIOD_MS;
-  }
-
-  getCacheExpiryDate(): Date | null {
-    const expiry = Number(Zotero.Prefs.get(PREF_CACHE_EXPIRY));
-    return expiry ? new Date(expiry) : null;
   }
 
   // ─── Validation ───────────────────────────────────────────────
 
-  async validate(
-    credentials: LicenseCredentials,
-    forceRefresh = false,
-  ): Promise<LicenseStatus> {
-    csLog(
-      "INFO",
-      `License validation requested — forceRefresh: ${forceRefresh}`,
-    );
+  /**
+   * Resolves for every HTTP status (successCodes: false), so the promise
+   * settling is itself the discriminator:
+   *   resolved → we reached the server; read status + body
+   *   rejected → we did not reach it (offline, DNS, refused, timeout)
+   *
+   * This replaces the old `e?.status ?? e?.xmlhttp?.status` sniffing, under
+   * which a 401/403 fell into the catch and silently degraded to success.
+   */
+  private async requestValidation(
+    c: LicenseCredentials,
+  ): Promise<{ status: number; body: any } | null> {
+    try {
+      const xhr = await Zotero.HTTP.request(
+        "POST",
+        `${getApiBase()}/license/validate`,
+        {
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: c.email,
+            license_key: c.licenseKey,
+            zotero_user_id: c.zoteroUserId,
+          }),
+          responseType: "json",
+          successCodes: false,
+          timeout: REQUEST_TIMEOUT,
+          // Zotero retries 5xx for up to an hour by default. On the startup
+          // path that would leave an orphaned XHR running long after the
+          // check returned.
+          errorDelayMax: 0,
+          noCache: true,
+        },
+      );
+      return { status: xhr.status, body: xhr.response };
+    } catch (e) {
+      csLog("WARN", "License request did not reach the server:", e);
+      return null;
+    }
+  }
 
-    if (!forceRefresh) {
-      const cached = this.getCachedStatus();
-      if (cached) {
-        csLog("INFO", "License validation served from cache");
-        return cached;
+  /** Always hits the network. There is no cache path — no sync, no use. */
+  async validateAuthoritative(
+    credentials: LicenseCredentials,
+  ): Promise<ValidationResult> {
+    if (__env__ === "development") {
+      const forced = Zotero.Prefs.get(
+        "extensions.theciteshop.debug.forceOutcome",
+      );
+      if (typeof forced === "string" && forced) {
+        csLog("WARN", `DEBUG: forcing license outcome "${forced}"`);
+        const outcome = forced as LicenseOutcome;
+        return { outcome, reasonKey: reasonKeyFor(outcome) };
       }
     }
 
     if (!credentials.zoteroUserId) {
+      return { outcome: "no-zotero-user", reasonKey: "status-no-zotero" };
+    }
+
+    const response = await this.requestValidation(credentials);
+    if (!response) {
       return {
-        valid: false,
-        reason:
-          "Please log in to your Zotero account at zotero.org to use purchased styles.",
+        outcome: "unreachable",
+        reasonKey: "status-server-unreachable",
       };
     }
 
-    try {
-      const zotero = ztoolkit.getGlobal("Zotero");
-      const timeout = new Promise((_, reject) =>
-        setTimeout(
-          () => reject(new Error("Request timed out")),
-          REQUEST_TIMEOUT,
-        ),
-      );
+    const body = response.body;
+    const outcome = classifyResponse(response.status, body);
+    const reasonText =
+      body && typeof body.reason === "string" ? body.reason : undefined;
 
-      const response = (await Promise.race([
-        zotero.HTTP.request("POST", `${API_BASE}/license/validate`, {
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            email: credentials.email,
-            license_key: credentials.licenseKey,
-            zotero_user_id: credentials.zoteroUserId,
-          }),
-          responseType: "json",
-        }),
-        timeout,
-      ])) as any;
+    csLog("INFO", `License validation → ${outcome} (HTTP ${response.status})`);
 
-      const data = response.response as unknown as {
-        valid: boolean;
-        reason?: string;
-        styles?: string[];
-      };
-
-      if (data.valid) {
-        csLog(
-          "INFO",
-          `License validated via API — styles count: ${data.styles?.length ?? 0}`,
-        );
-        this.setCacheValid(data.styles ?? []);
-        return { valid: true, styles: data.styles ?? [] };
-      } else {
-        Zotero.Prefs.clear(PREF_CACHE_VALID);
-        Zotero.Prefs.clear(PREF_CACHE_EXPIRY);
-        return {
-          valid: false,
-          reason: data.reason ?? "License validation failed.",
-        };
-      }
-    } catch (e: any) {
-      // Zotero.HTTP.request throws on non-2xx; check for a 429 with a reason
-      if (e?.status === 429 || e?.xmlhttp?.status === 429) {
-        const xhr = e?.xmlhttp ?? e;
-        let reason: string | undefined;
-        try {
-          const body =
-            typeof xhr.response === "string"
-              ? JSON.parse(xhr.response)
-              : xhr.response;
-          reason = body?.reason;
-        } catch {
-          /* ignore parse errors */
-        }
-        csLog("WARN", "License validation rejected with 429:", reason ?? e);
-        return {
-          valid: false,
-          reason: reason ?? "Too many requests. Please try again later.",
-        };
-      }
-
-      csLog(
-        "ERROR",
-        "License validation error — attempting grace period fallback:",
-        e,
-      );
-
-      const grace = this.getCachedStatusWithGrace();
-      if (grace) {
-        csLog(
-          "WARN",
-          grace.fromGrace
-            ? "Server unreachable — serving from grace period (cache expired)"
-            : "Server unreachable — serving from valid cache",
-        );
-        return grace;
-      }
-
-      return {
-        valid: false,
-        reason:
-          "Could not reach the license server. Please check your connection.",
-      };
+    if (outcome === "active") {
+      const styles: string[] = Array.isArray(body?.styles) ? body.styles : [];
+      this.setLastSyncOk(Date.now());
+      this.setEntitlement(styles);
+      return { outcome, styles, reasonText };
     }
+
+    // Only an authoritative verdict clears state. Transient failures must
+    // leave the tolerance clock and the snapshot intact.
+    if (outcome === "expired" || outcome === "invalid-credentials") {
+      this.clearLastSyncOk();
+      this.clearEntitlement();
+    }
+
+    return { outcome, reasonText, reasonKey: reasonKeyFor(outcome) };
   }
 }
 
 export const licenseManager = new LicenseManager();
-
-export const API_BASE = "https://citationstyler.com/wp-json/citationstyler/v1";

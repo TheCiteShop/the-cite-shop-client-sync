@@ -1,21 +1,22 @@
-# Citation Styler Client Sync — Zotero Plugin
+# The Cite Shop Client Sync — Zotero Plugin
 
 A Zotero plugin that allows you to install and manage your purchased custom citation styles directly within Zotero.
 
 Please download the latest version of the plugin here:
-[https://github.com/POBrien333/citationstyler-client-sync/releases](https://github.com/POBrien333/citationstyler-client-sync/releases)
+[https://github.com/TheCiteShop/theciteshop-client-sync/releases](https://github.com/TheCiteShop/theciteshop-client-sync/releases)
 
-![Citation Styler Client Sync - install, update, reinstall](./assets/screenshots/Citation%20Styler%20Client%20Sync%20-%20install,%20update,%20reinstall.png)
+![The Cite Shop Client Sync - install, update, reinstall](./assets/screenshots/The%20Cite%20Shop%20Client%20Sync%20-%20install,%20update,%20reinstall.png)
 
 ## Requirements
 
 - Zotero 7 or later
-- A valid license key (purchased at [citationstyler.com](https://citationstyler.com))
-- A Zotero account (zotero.org)
+- An active subscription (purchased at [theciteshop.com](https://theciteshop.com))
+- A Zotero account (zotero.org) — your license is tied to this account, and works on as many devices as you like
+- A periodic internet connection — see [Subscription and offline use](#subscription-and-offline-use)
 
 ## Installation
 
-1. Download the latest `.xpi` file from the [releases page](https://github.com/POBrien333/citationstyler-client-sync/releases)
+1. Download the latest `.xpi` file from the [releases page](https://github.com/TheCiteShop/theciteshop-client-sync/releases)
 2. In Zotero, go to **Tools → Plugins**
 3. Click the gear icon and select **Install Plugin From File…**
 4. Select the downloaded `.xpi` file
@@ -23,7 +24,7 @@ Please download the latest version of the plugin here:
 
 ## First Use
 
-After installation, Zotero will automatically open the **Citation Styler Client Sync** settings pane. (If not, go to Edit > Settings)
+After installation, Zotero will automatically open the **The Cite Shop Client Sync** settings pane. (If not, go to Edit > Settings)
 
 1. Enter the **email address** you used to purchase your license
 2. Enter your **license key**
@@ -34,12 +35,35 @@ After installation, Zotero will automatically open the **Citation Styler Client 
 
 When updated versions of your styles are available:
 
-1. Open Zotero **Settings → Citation Styler Client Sync**
+1. Open Zotero **Settings → The Cite Shop Client Sync**
 2. Click **Check for Updates**
 3. Any styles with updates will show an **Update available** badge
 4. Click **Update** next to each style to install the latest version
 
-More detailled instructions with screenshots can be seen on my website: [Citation Styler Client Sync – Setup & Use](https://citationstyler.com/en/client-sync-einrichtung/)
+More detailled instructions with screenshots can be seen on my website: [The Cite Shop Client Sync – Setup & Use](https://theciteshop.com/en/client-sync-einrichtung/)
+
+## Subscription and offline use
+
+Styles installed by this plugin are tied to an active subscription.
+
+- The plugin verifies your license when Zotero starts, once a day while it is
+  running, and whenever you open its settings pane.
+- **You can work offline for up to 3 days.** If no license check has succeeded
+  in that time, your purchased styles are removed from Zotero and you will see
+  a notification explaining why. Reconnect and open the settings pane to
+  reinstall them.
+- If your subscription ends, is refunded, or is revoked, your purchased styles
+  are removed the next time the plugin checks.
+- Clearing your credentials, or uninstalling the plugin, also removes them.
+
+**Your own styles are never touched.** Removal only ever applies to purchased
+styles — either ones this plugin installed, or files that are byte-for-byte
+identical to a style we supplied (so a copy you moved between machines by hand
+is still covered). A style of your own is left strictly alone, even if it
+happens to share an ID with one of ours, because its contents differ.
+
+If installing a purchased style would replace one you already have — that is,
+one sharing the same style ID — the plugin asks first.
 
 ## Troubleshooting
 
@@ -49,48 +73,32 @@ More detailled instructions with screenshots can be seen on my website: [Citatio
 **"Email does not match this license key"**
 → Make sure you are using the same email address you used when purchasing.
 
-**"Activation limit reached"**
-→ You have reached the maximum number of devices for this license. Please contact support to deactivate an old device.
+**My styles disappeared**
+→ One of three things happened: your subscription ended; the plugin could not
+reach the license server for more than 3 days; or the credentials were cleared.
+Open **Settings → The Cite Shop Client Sync** — the status message will say
+which. Once your subscription is active and you are online, verify your license
+and reinstall.
 
 ## Support
 
-For license issues or support, please contact: info@citationstyler.com
+For license issues or support, please contact: info@theciteshop.com
 
 ---
 
 ## Changelog
 
-### v1.0.5
-
-- Add support for Zotero 9
-
-### v1.0.4
-
-- Improved 429 error handling: the server's reason message is now displayed directly to the user instead of a generic "Could not reach the license server" message
-
-### v1.0.3
-
-- Switch API endpoint from staging to production (citationstyler.com)
-- Fix CI lint formatting issues
-- Upgrade GitHub Actions artifact upload to v5 (resolve Node.js 20 deprecation)
-
-### v1.0.2
-
-- Dark mode support: all UI elements now adapt to Zotero's light/dark theme
-- Sidebar icon switches to a white variant in dark mode
-- Preferences pane heading updated to "Citation Styler Client Sync" with version number displayed
-- Added "Copy Logs" button alongside the license buttons — click it to copy diagnostic information to your clipboard when contacting support
-
-### v1.0.1
-
-- Plugin rebranded to "Citation Styler" / "Citation Styler Client Sync"
-- Improved "no styles available" error message to direct users to support
-- Various stability and build improvements
-
-### v1.0.0
+### v0.0.1
 
 - Initial release
 - License validation via email and license key
 - Browse, install, and update purchased citation styles within Zotero
-- Offline support via cache and grace period
+- Dark mode support: all UI elements adapt to Zotero's light/dark theme
+- Subscription enforcement: license is re-checked at startup, daily, and when
+  the settings pane is opened
+- Purchased styles are removed if the subscription ends, or if no license check
+  has succeeded for 3 days. Only purchased styles are ever touched — a style of
+  your own is left alone even if it shares an ID with one of ours
+- You are warned before installing a style that would replace or delete one you
+  already have, whether it shares an ID or just a name
 - Auto-opens settings on first install

@@ -45,7 +45,7 @@ export function getFormattedLogs(): string {
   })();
 
   const header = [
-    "Citation Styler Client Sync - Log Export",
+    "The Cite Shop Client Sync - Log Export",
     `Version:        ${version}`,
     `Exported:       ${now}`,
     `Zotero Version: ${zVersion}`,
