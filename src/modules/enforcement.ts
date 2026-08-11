@@ -139,6 +139,26 @@ export function notifyStylesRemoved(
   }
 }
 
+/**
+ * Act on an authoritative refusal that was obtained outside the normal check —
+ * currently the Verify button, which validates typed values directly.
+ *
+ * Kept here rather than inlined at the call site so the removal reason and the
+ * notification behave identically however the verdict was reached.
+ */
+export async function enforceAuthoritativeRefusal(
+  outcome: LicenseOutcome,
+): Promise<RemovalReport | null> {
+  if (outcome !== "expired" && outcome !== "invalid-credentials") return null;
+  if (styleLedger.count() === 0) return null;
+
+  const reason = removalReasonFor(outcome);
+  csLog("WARN", `Authoritative refusal (${outcome}) — removing managed styles`);
+  const report = await styleLedger.removeAll(reason);
+  notifyStylesRemoved(reason, report);
+  return report;
+}
+
 export async function runEnforcementCheck(
   trigger: EnforcementTrigger,
 ): Promise<EnforcementResult | null> {

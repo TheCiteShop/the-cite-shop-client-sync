@@ -1,6 +1,7 @@
 import { version } from "../package.json";
 import { StyleCredentials, customStylesManager } from "./modules/customStyles";
 import {
+  enforceAuthoritativeRefusal,
   runEnforcementCheck,
   scheduleStartupCheck,
   startEnforcementTimer,
@@ -292,6 +293,24 @@ async function onPrefsEvent(type: string, data: { [key: string]: any }) {
           result.reasonText ??
           getString(result.reasonKey ?? "status-validation-failed");
         statusDiv.style.color = getColors(win).error;
+
+        // An authoritative refusal about credentials we had already saved and
+        // verified is just as binding here as during a background check —
+        // otherwise the customer is told their license is dead while the
+        // styles stay installed.
+        //
+        // Gated on the typed values matching the saved ones so the typo
+        // protection above still holds: entering a wrong key must never
+        // delete the styles a working license installed.
+        const savedNow = licenseManager.loadCredentials();
+        const isSavedCredentials =
+          !!savedNow &&
+          savedNow.licenseKey === licenseKey &&
+          savedNow.email.toLowerCase() === email.toLowerCase();
+
+        if (isSavedCredentials) {
+          await enforceAuthoritativeRefusal(result.outcome);
+        }
         return;
       }
 

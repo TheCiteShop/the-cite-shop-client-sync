@@ -1,5 +1,6 @@
 import { assert } from "chai";
 import { LedgerEntry, styleLedger } from "../src/modules/styleLedger";
+import { enforceAuthoritativeRefusal } from "../src/modules/enforcement";
 
 const PREF = "extensions.theciteshop.managedStyles";
 
@@ -136,5 +137,41 @@ describe("styleLedger", function () {
     // but it must not throw, and must not wipe on an unloaded-data error.
     styleLedger.write([entry({ styleID: "http://example.com/ghost" })]);
     assert.doesNotThrow(() => styleLedger.prune());
+  });
+
+  // Regression: the Verify button reported "license is no longer active" while
+  // leaving the styles installed, because it deliberately bypasses the normal
+  // enforcement check. An authoritative refusal must remove them whatever path
+  // produced it.
+  describe("enforceAuthoritativeRefusal", function () {
+    it("removes managed styles when the server says expired", async function () {
+      styleLedger.write([entry({ styleID: "http://example.com/gone" })]);
+      await enforceAuthoritativeRefusal("expired");
+      assert.equal(styleLedger.count(), 0);
+    });
+
+    it("removes managed styles when the server says invalid", async function () {
+      styleLedger.write([entry({ styleID: "http://example.com/gone" })]);
+      await enforceAuthoritativeRefusal("invalid-credentials");
+      assert.equal(styleLedger.count(), 0);
+    });
+
+    it("leaves styles alone for a transient outcome", async function () {
+      styleLedger.write([entry({ styleID: "http://example.com/gone" })]);
+      for (const outcome of [
+        "unreachable",
+        "server-error",
+        "rate-limited",
+        "no-zotero-user",
+      ] as const) {
+        const report = await enforceAuthoritativeRefusal(outcome);
+        assert.isNull(report, outcome);
+      }
+      assert.equal(styleLedger.count(), 1);
+    });
+
+    it("is a no-op when nothing is managed", async function () {
+      assert.isNull(await enforceAuthoritativeRefusal("expired"));
+    });
   });
 });
