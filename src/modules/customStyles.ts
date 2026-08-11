@@ -151,34 +151,6 @@ class CustomStylesManager {
   }
 
   /**
-   * Find an installed style with the same title but a different id — Zotero
-   * will delete it during install. Returns null when there is none.
-   */
-  private findTitleClash(
-    zotero: any,
-    title: string | undefined,
-    cslId: string,
-  ): any | null {
-    if (!title) return null;
-    try {
-      const all = zotero.Styles.getAll();
-      for (const key of Object.keys(all)) {
-        const candidate = all[key];
-        if (
-          candidate &&
-          candidate.title === title &&
-          candidate.styleID !== cslId
-        ) {
-          return candidate;
-        }
-      }
-    } catch (e) {
-      csLog("WARN", "Could not scan for a title clash:", e);
-    }
-    return null;
-  }
-
-  /**
    * Installs a style and records it in the ownership ledger.
    *
    * @returns false if the user declined to replace an existing style.
@@ -204,10 +176,14 @@ class CustomStylesManager {
     const zotero = ztoolkit.getGlobal("Zotero") as any;
     if (!zotero?.Styles) throw new Error("Zotero.Styles not available");
 
-    // Zotero's install overwrites a style sharing this id, so warn before we
-    // replace something the customer installed themselves. Once replaced their
-    // original is gone, which is why we take ownership rather than refusing to
-    // remove it later.
+    // Zotero replaces a style sharing this id — the filename derives from the
+    // id, so the write overwrites it — so warn before we replace something the
+    // customer installed themselves. Once replaced their original is gone,
+    // which is why we take ownership rather than refusing to remove it later.
+    //
+    // Only the id matters here. A style with the same *title* under a
+    // different id is left alone by Zotero (see test/titleclash.test.ts), so
+    // warning about it would be a false alarm.
     const prior = zotero.Styles.get(cslId, true);
     const alreadyOurs = styleLedger.has(cslId);
     const preexisting = !!prior && !alreadyOurs;
@@ -221,28 +197,6 @@ class CustomStylesManager {
       if (!proceed) {
         csLog("INFO", `User declined to replace existing style ${cslId}`);
         return false;
-      }
-    } else {
-      // Zotero's install also deletes any existing style that merely shares
-      // the TITLE, even under a completely different id — see style.js,
-      // "also look for an existing style with the same title", followed by an
-      // unconditional existingFile.remove(). The id check above cannot catch
-      // that, so without this the customer silently loses an unrelated style.
-      const titleClash = this.findTitleClash(zotero, cslTitle, cslId);
-      if (titleClash) {
-        const proceed = win.confirm(
-          getString("status-replace-title-clash", {
-            args: { name: titleClash.title },
-          }),
-        );
-        if (!proceed) {
-          csLog("INFO", `User declined title clash with ${titleClash.styleID}`);
-          return false;
-        }
-        csLog(
-          "WARN",
-          `Installing ${cslId} will delete ${titleClash.styleID} (same title)`,
-        );
       }
     }
 

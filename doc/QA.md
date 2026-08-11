@@ -197,9 +197,7 @@ Extend those tables in preference to adding integration tests.
   invoked synchronously, so it was unclear whether the awaited removals would
   be cut short. They are not.
 
-Everything else in the table below is still unexercised. The highest-risk of
-those is **test 17 (title clash)** — newest code, never run, and its failure
-mode is deleting a style the customer wrote themselves.
+Everything else in the table below is still unexercised.
 
 Run with `npm start`. Reset state between tests using the snippet above.
 
@@ -221,7 +219,7 @@ Run with `npm start`. Reset state between tests using the snippet above.
 | 14  | Unset clock                      | Clear `lastSyncOk`, `forceOutcome = unreachable`            | **Keeps** styles — a missing timestamp is not evidence of a lapse               |
 | 15  | Timer fires                      | `debug.checkIntervalMs = 10000`                             | Check repeats; only one timer runs                                              |
 | 16  | Untracked copy is swept          | Install, then clear `managedStyles` only, then force expiry | Removed anyway — the hash still identifies it as ours                           |
-| 17  | Title clash                      | Install a style titled exactly like a purchased one         | Dialog warns it will be **deleted**; declining aborts the install               |
+| 17  | Same title, different ID         | Install a style titled like a purchased one, different ID   | Both stay installed — Zotero does not delete by title                           |
 | 18  | Verify on a dead license         | Deactivate in LMFWC, then click Verify                      | Message **and** removal — Verify enforces when creds match the saved ones       |
 | 19  | Verify with a wrong key          | Type a bad key while holding a valid saved one              | Error only — installed styles **untouched**                                     |
 
@@ -272,7 +270,7 @@ Confirm in the log (**Copy Logs**) that it reports
 
 ---
 
-## 7. Tests 11 and 17 — install collisions
+## 7. Test 11 — install collisions
 
 Zotero's `install()` removes an existing style matched by **id, filename, or
 title**, then deletes that file unconditionally (`style.js` ~429 and 515). Both
@@ -290,20 +288,29 @@ file.
      been overwritten, so declining to remove it later would not give the
      customer their file back — it would only leave paid content on disk.
 
-### Title collision (test 17)
+### Same title, different ID (test 17) — a non-issue
 
-The subtler one. A style with a **different** id but the **same title** is also
-deleted by Zotero, and the id check cannot see it coming.
+Two styles sharing a title but not an ID **coexist happily**. There is no
+dialog and nothing is deleted.
 
-1. Install a style with a distinct id but titled exactly like one you sell.
-2. Install the purchased style through the plugin.
-3. **Expected:** a dialog explaining the existing style will be deleted because
-   Zotero treats same-named styles as the same style. Cancel aborts the install.
+This is worth stating explicitly because Zotero's source reads as though the
+opposite were true, and a warning was briefly shipped on that basis.
+`_install` looks for an existing style by title (`style.js` ~429) and then calls
+`existingFile.remove(false)` (~515) — but that line cannot execute. It assigns
+`existingStyle.file`, and `Zotero.Style` has no `.file` property; it exposes
+`.path` and `.fileName`. Dead code left from the nsIFile era.
 
-> Practical consequence for the catalog: **style titles are effectively a global
-> namespace in Zotero**, not just IDs. A shop style titled "APA 7th edition"
-> will delete a customer's own file with that exact title. Distinctive titles
-> avoid the dialog ever firing.
+Same-ID installs still replace the file, but only because the filename is
+derived from the style ID and `putContentsAsync` overwrites it — not because
+that removal line fires.
+
+`test/titleclash.test.ts` pins both behaviors. If Zotero ever repairs the dead
+branch, the second test fails and a warning should be reinstated.
+
+**Lesson worth keeping:** the original claim came from reading the branch and
+tracing it to a `.remove()` call, without checking that the variable it is
+called on could ever be non-null. Verify upstream behavior by running it, not
+by reading it.
 
 ---
 
@@ -426,9 +433,10 @@ Keep these in mind when reviewing changes to this area.
 - **Never clear the ledger wholesale.** Entries that failed or were skipped are
   retained for retry; clearing regardless would orphan the surviving files
   permanently.
-- **Zotero deletes by title, not just id.** `install()` will remove an unrelated
-  style that merely shares a name. Anything touching the install path must keep
-  the title-clash confirmation, or customers lose their own work silently.
+- **Zotero does NOT delete by title, despite appearances.** The title-match
+  branch in `_install` is dead code (see §7). A warning was shipped on the
+  strength of reading it, then removed once running it proved otherwise. Do not
+  reinstate without a failing `test/titleclash.test.ts`.
 - **The stored hash is the server's, not the file's.** An earlier version of the
   hash test recorded the hash of the file _after_ writing it to disk, which
   proved nothing — production stores what the server sent. The test now hashes

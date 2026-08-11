@@ -62,10 +62,8 @@ identical to a style we supplied (so a copy you moved between machines by hand
 is still covered). A style of your own is left strictly alone, even if it
 happens to share an ID with one of ours, because its contents differ.
 
-If installing a purchased style would replace or delete a style you already
-have, the plugin asks first. That includes the case where your style merely
-shares a _name_ with a purchased one — Zotero treats styles with the same name
-as the same style, so it would otherwise be overwritten without warning.
+If installing a purchased style would replace one you already have — that is,
+one sharing the same style ID — the plugin asks first.
 
 ## Troubleshooting
 

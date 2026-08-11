@@ -66,7 +66,8 @@ This is a Zotero plugin that enables users to install and manage custom citation
 ├── test/
 │   ├── startup.test.ts          # Smoke test
 │   ├── enforcement.test.ts      # classifyResponse + decideAction tables
-│   └── ledger.test.ts           # Ledger round-trip, corruption, removal
+│   ├── ledger.test.ts           # Ledger round-trip, corruption, removal
+│   └── titleclash.test.ts       # Pins Zotero install overwrite behavior
 │
 ├── zotero-plugin.config.ts      # Build configuration
 ├── package.json                 # Dependencies & config
@@ -109,10 +110,9 @@ Manages style installation, rendering, and updates.
 
 `creds` is a `StyleCredentials` (`licenseKey`, `email`, `zoteroUserId`) — the style endpoints verify all three, not just the key.
 
-**Two collisions are confirmed before installing**, because Zotero's `install()` deletes an existing style matched by id, filename, **or title**, then removes that file unconditionally (`style.js`, ~line 429 and 515):
+**An ID collision is confirmed before installing** and recorded as `preexisting: true`. Zotero derives the filename from the style id, so installing over the same id overwrites the customer's file.
 
-- same CSL `<id>` → recorded as `preexisting: true`
-- same **title**, different id → `findTitleClash()`; the customer would otherwise silently lose an unrelated style
+A style with the same **title** under a different id is _not_ a collision — Zotero leaves it installed. `_install` appears to delete it (`style.js` ~429 finds it by title, ~515 calls `existingFile.remove(false)`), but that line cannot fire: it assigns `existingStyle.file`, and `Zotero.Style` has no `.file` property — only `.path` and `.fileName`. Dead code from the nsIFile era. Verified empirically in `test/titleclash.test.ts`; if Zotero ever repairs it that test fails and a warning should be reinstated.
 
 ### Style Ledger (`src/modules/styleLedger.ts`)
 

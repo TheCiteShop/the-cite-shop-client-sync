@@ -41,7 +41,6 @@ export type FluentMessageId =
   | 'status-offline-tolerance'
   | 'status-rate-limited'
   | 'status-replace-existing'
-  | 'status-replace-title-clash'
   | 'status-server-error'
   | 'status-server-unreachable'
   | 'status-styles-found'
