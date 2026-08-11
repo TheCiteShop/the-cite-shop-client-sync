@@ -187,6 +187,20 @@ Extend those tables in preference to adding integration tests.
 
 ## 5. Manual test matrix
 
+**Verified 2026-08-11** against the live backend (tests 1, 2, 13, 18):
+
+- Cancelling the subscription deactivates the license, the plugin removes the
+  style, and the sticky popup appears.
+- Deactivating the license and clicking **Verify** removes the style.
+- **Uninstalling the plugin** removes the `.csl`. This also settles an open
+  question: `uninstall()` in `bootstrap.js` is `async` and bootstrap hooks are
+  invoked synchronously, so it was unclear whether the awaited removals would
+  be cut short. They are not.
+
+Everything else in the table below is still unexercised. The highest-risk of
+those is **test 17 (title clash)** — newest code, never run, and its failure
+mode is deleting a style the customer wrote themselves.
+
 Run with `npm start`. Reset state between tests using the snippet above.
 
 | #   | Scenario                         | How to force it                                             | Expected                                                                        |
