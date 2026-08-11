@@ -290,8 +290,11 @@ class CustomStylesManager {
       btn: HTMLElement,
       row: HTMLElement,
     ) => Promise<void>,
+    installedIds?: Set<string>,
   ): HTMLElement {
-    const status = this.getStyleStatus(style);
+    const status = installedIds?.has(style.id)
+      ? "up-to-date"
+      : this.getStyleStatus(style);
     const installedDate = this.getInstalledStyleDate(style.id);
     const fmt = (d: Date | null) =>
       d ? d.toISOString().split("T")[0] : "unknown";
@@ -518,43 +521,54 @@ class CustomStylesManager {
     statusEl.style.color = getColors(win).success;
     container.innerHTML = "";
 
+    const justInstalled = new Set<string>();
+
     const render = () => {
       container.innerHTML = "";
       for (const style of styles) {
-        const row = this.buildStyleRow(doc, win, style, async (s, btn) => {
-          btn.textContent = getString("btn-installing");
-          btn.setAttribute("disabled", "true");
-          try {
-            const content = await this.fetchRemoteStyleContent(
-              s.id,
-              creds,
-              s.hash,
-            );
-            const installed = await this.installStyleToZotero(
-              s.id,
-              content,
-              win,
-            );
-            if (!installed) {
+        const row = this.buildStyleRow(
+          doc,
+          win,
+          style,
+          async (s, btn) => {
+            btn.textContent = getString("btn-installing");
+            btn.setAttribute("disabled", "true");
+            try {
+              const content = await this.fetchRemoteStyleContent(
+                s.id,
+                creds,
+                s.hash,
+              );
+              const installed = await this.installStyleToZotero(
+                s.id,
+                content,
+                win,
+              );
+              // Declined the replace confirmation — nothing was installed, so
+              // it must not be marked as such.
+              if (!installed) {
+                render();
+                return;
+              }
+              justInstalled.add(s.id);
+              statusEl.textContent = getString("status-installed-ok", {
+                args: { name: s.name },
+              });
+              statusEl.style.color = getColors(win).success;
               render();
-              return;
+            } catch (e) {
+              csLog("ERROR", "Install error:", e);
+              btn.textContent = getString("btn-failed");
+              btn.style.borderColor = getColors(win).error;
+              btn.removeAttribute("disabled");
+              statusEl.textContent = getString("status-install-failed", {
+                args: { name: s.name },
+              });
+              statusEl.style.color = getColors(win).error;
             }
-            statusEl.textContent = getString("status-installed-ok", {
-              args: { name: s.name },
-            });
-            statusEl.style.color = getColors(win).success;
-            render();
-          } catch (e) {
-            csLog("ERROR", "Install error:", e);
-            btn.textContent = getString("btn-failed");
-            btn.style.borderColor = getColors(win).error;
-            btn.removeAttribute("disabled");
-            statusEl.textContent = getString("status-install-failed", {
-              args: { name: s.name },
-            });
-            statusEl.style.color = getColors(win).error;
-          }
-        });
+          },
+          justInstalled,
+        );
         container.appendChild(row);
       }
     };
