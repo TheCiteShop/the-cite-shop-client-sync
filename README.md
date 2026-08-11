@@ -99,6 +99,6 @@ For license issues or support, please contact: info@theciteshop.com
 - Purchased styles are removed if the subscription ends, or if no license check
   has succeeded for 3 days. Only purchased styles are ever touched — a style of
   your own is left alone even if it shares an ID with one of ours
-- You are warned before installing a style that would replace or delete one you
-  already have, whether it shares an ID or just a name
+- You are warned before installing a style that would replace one you already
+  have under the same ID
 - Auto-opens settings on first install
