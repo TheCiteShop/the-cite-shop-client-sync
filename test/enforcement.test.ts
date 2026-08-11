@@ -60,7 +60,7 @@ describe("subscription enforcement", function () {
       assert.equal(classifyResponse(200, null), "server-error");
     });
 
-    it("maps an unrecognised status to server-error", function () {
+    it("maps an unrecognized status to server-error", function () {
       assert.equal(
         classifyResponse(200, { status: "banana", authoritative: true }),
         "server-error",

@@ -155,9 +155,9 @@ Run with `npm start`. Reset state between tests using the snippet above.
 
 | #   | Scenario                         | How to force it                                             | Expected                                                                        |
 | --- | -------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| 1   | Active licence                   | Normal verify                                               | Styles listed; `lastSyncOk` advances                                            |
+| 1   | Active license                   | Normal verify                                               | Styles listed; `lastSyncOk` advances                                            |
 | 2   | Subscription expired             | `forceOutcome = expired`                                    | Managed styles removed, **sticky** popup, pane shows "subscription has expired" |
-| 3   | Invalid credentials              | `forceOutcome = invalid-credentials`                        | Same as 2, with the invalid-licence message                                     |
+| 3   | Invalid credentials              | `forceOutcome = invalid-credentials`                        | Same as 2, with the invalid-license message                                     |
 | 4   | Offline, inside window           | `forceOutcome = unreachable`                                | Styles **kept**; pane shows "removed in N day(s)"; **no popup**                 |
 | 5   | Offline, past window             | `forceOutcome = unreachable` + backdate `lastSyncOk` 4 days | Styles removed + popup                                                          |
 | 6   | **Unmanaged style is untouched** | See §6                                                      | Style still installed and listed in Zotero                                      |
@@ -278,7 +278,7 @@ succeeded. `lastSyncOk` must be **unchanged**, since a transient outcome does
 not refresh the clock.
 
 **Clean up afterwards:** delete `.scaffold/profile/user.js`, or every later
-`npm start` re-seeds a fake licence and a backdated clock.
+`npm start` re-seeds a fake license and a backdated clock.
 
 ---
 

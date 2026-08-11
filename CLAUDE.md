@@ -22,7 +22,7 @@ This is a Zotero plugin that enables users to install and manage custom citation
 - **Custom Styles Installation**: Browse and install purchased citation styles directly in Zotero
 - **Update Management**: Check for and install style updates
 - **Zotero Integration**: Fully integrated preferences pane in Zotero settings
-- **Multi-device Support**: A licence is tied to a Zotero account and works on unlimited devices — there are no activation slots
+- **Multi-device Support**: A license is tied to a Zotero account and works on unlimited devices — there are no activation slots
 - **Subscription Enforcement**: Styles are removed when a subscription lapses (see below)
 
 ## Technology Stack
@@ -51,7 +51,7 @@ This is a Zotero plugin that enables users to install and manage custom citation
 │       ├── ztoolkit.ts          # Zotero toolkit wrapper
 │       ├── locale.ts            # i18n localization strings
 │       ├── logger.ts            # In-memory log ring (Copy Logs button)
-│       ├── theme.ts             # Light/dark colour palette
+│       ├── theme.ts             # Light/dark color palette
 │       └── window.ts            # Window management utilities
 │
 ├── addon/
@@ -108,7 +108,7 @@ Manages style installation, rendering, and updates.
 
 ### Style Ledger (`src/modules/styleLedger.ts`)
 
-The record of which styles **this plugin** installed. Zotero keeps no provenance, so without it an uninstall would delete styles the customer installed themselves. Stored in `extensions.theciteshop.managedStyles`, deliberately separate from the entitlement snapshot because that snapshot is cleared the moment a licence goes invalid.
+The record of which styles **this plugin** installed. Zotero keeps no provenance, so without it an uninstall would delete styles the customer installed themselves. Stored in `extensions.theciteshop.managedStyles`, deliberately separate from the entitlement snapshot because that snapshot is cleared the moment a license goes invalid.
 
 - `read()` never throws — a throw would take down the startup check
 - `record()` upserts by `styleID` and never flips `preexisting` back to false
@@ -264,7 +264,7 @@ Localization strings are stored in `addon/locale/` and referenced via `getString
 - "Please log in to your Zotero account" → User must sign in at zotero.org
 - "Email does not match this license key" → Email/key mismatch
 - "Your subscription has expired" → Styles have been removed; renew to restore
-- "Your styles will be removed in N day(s)" → No successful licence check within the tolerance window
+- "Your styles will be removed in N day(s)" → No successful license check within the tolerance window
 
 **Developer Error Handling:**
 
@@ -327,7 +327,7 @@ bypass.
 ## Known Limitations & Notes
 
 - Plugin requires active Zotero account (zotero.org login)
-- Licence validation requires a periodic internet connection; 3 days without a successful check removes installed styles
+- License validation requires a periodic internet connection; 3 days without a successful check removes installed styles
 - Email validation is basic regex-based
 - `Zotero.Styles` is typed `any` in `zotero-types`, so removal code gets **no compile-time checking**. Note in particular that `Zotero.Styles.get()` returns `false` (not `null`) on a miss, and needs `skipMappings=true` or it may return a different style than requested
 - Style installation depends on Zotero's style management API

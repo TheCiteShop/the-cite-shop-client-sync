@@ -148,7 +148,7 @@ async function onPrefsEvent(type: string, data: { [key: string]: any }) {
   // ── Pre-fill saved credentials ────────────────────────────────────────────
   const saved = licenseManager.loadCredentials();
   if (saved) {
-    csLog("INFO", "Saved credentials found — running licence check");
+    csLog("INFO", "Saved credentials found — running license check");
     emailInput.value = saved.email;
     licenseInput.value = saved.licenseKey;
   } else {
@@ -175,7 +175,7 @@ async function onPrefsEvent(type: string, data: { [key: string]: any }) {
       );
       showUpdateRow();
     } catch (e) {
-      // The licence is fine but the style list did not load. Show what is
+      // The license is fine but the style list did not load. Show what is
       // installed rather than the misleading "contact support" message.
       csLog("ERROR", "Style list fetch failed:", e);
       statusDiv.textContent = getString("status-server-unreachable");
@@ -235,7 +235,7 @@ async function onPrefsEvent(type: string, data: { [key: string]: any }) {
     customStylesManager.renderInstalledFromLedger(doc, stylesContainer);
   }
 
-  // ── Real licence check on pane open ───────────────────────────────────────
+  // ── Real license check on pane open ───────────────────────────────────────
   if (saved && zoteroUserId) {
     statusDiv.textContent = getString("status-verifying");
     statusDiv.style.color = getColors(win).neutral;
@@ -274,7 +274,7 @@ async function onPrefsEvent(type: string, data: { [key: string]: any }) {
     try {
       // Validate the typed values directly rather than going through
       // enforcement: a mistyped key must not delete the styles a valid
-      // saved licence installed. Credentials are only persisted on success,
+      // saved license installed. Credentials are only persisted on success,
       // so enforcement never runs against an unverified key.
       const result = await licenseManager.validateAuthoritative({
         email,

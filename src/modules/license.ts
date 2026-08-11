@@ -141,7 +141,7 @@ export class LicenseManager {
   }
 
   /**
-   * Clears credentials and all licence state. Deliberately does NOT touch the
+   * Clears credentials and all license state. Deliberately does NOT touch the
    * style ledger — that is cleared by styleLedger.removeAll() as a consequence
    * of successful removal, so a partial failure leaves retryable entries.
    */
@@ -261,7 +261,7 @@ export class LicenseManager {
         "extensions.theciteshop.debug.forceOutcome",
       );
       if (typeof forced === "string" && forced) {
-        csLog("WARN", `DEBUG: forcing licence outcome "${forced}"`);
+        csLog("WARN", `DEBUG: forcing license outcome "${forced}"`);
         const outcome = forced as LicenseOutcome;
         return { outcome, reasonKey: reasonKeyFor(outcome) };
       }

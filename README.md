@@ -11,7 +11,7 @@ Please download the latest version of the plugin here:
 
 - Zotero 7 or later
 - An active subscription (purchased at [theciteshop.com](https://theciteshop.com))
-- A Zotero account (zotero.org) — your licence is tied to this account, and works on as many devices as you like
+- A Zotero account (zotero.org) — your license is tied to this account, and works on as many devices as you like
 - A periodic internet connection — see [Subscription and offline use](#subscription-and-offline-use)
 
 ## Installation
@@ -46,9 +46,9 @@ More detailled instructions with screenshots can be seen on my website: [The Cit
 
 Styles installed by this plugin are tied to an active subscription.
 
-- The plugin verifies your licence when Zotero starts, once a day while it is
+- The plugin verifies your license when Zotero starts, once a day while it is
   running, and whenever you open its settings pane.
-- **You can work offline for up to 3 days.** If no licence check has succeeded
+- **You can work offline for up to 3 days.** If no license check has succeeded
   in that time, your purchased styles are removed from Zotero and you will see
   a notification explaining why. Reconnect and open the settings pane to
   reinstall them.
@@ -70,9 +70,9 @@ style would replace one you already have, the plugin asks first.
 
 **My styles disappeared**
 → One of three things happened: your subscription ended; the plugin could not
-reach the licence server for more than 3 days; or the credentials were cleared.
+reach the license server for more than 3 days; or the credentials were cleared.
 Open **Settings → The Cite Shop Client Sync** — the status message will say
-which. Once your subscription is active and you are online, verify your licence
+which. Once your subscription is active and you are online, verify your license
 and reinstall.
 
 ## Support
@@ -89,8 +89,8 @@ For license issues or support, please contact: info@theciteshop.com
 - License validation via email and license key
 - Browse, install, and update purchased citation styles within Zotero
 - Dark mode support: all UI elements adapt to Zotero's light/dark theme
-- Subscription enforcement: licence is re-checked at startup, daily, and when
+- Subscription enforcement: license is re-checked at startup, daily, and when
   the settings pane is opened
-- Purchased styles are removed if the subscription ends, or if no licence check
+- Purchased styles are removed if the subscription ends, or if no license check
   has succeeded for 3 days; only styles installed by this plugin are touched
 - Auto-opens settings on first install

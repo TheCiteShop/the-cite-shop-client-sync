@@ -5,10 +5,10 @@ import { csLog } from "../utils/logger";
  *
  * Zotero itself keeps no provenance: a style the customer installed from the
  * public repository is indistinguishable from a purchased one. Without this
- * ledger, uninstalling on licence lapse would delete files we never installed.
+ * ledger, uninstalling on license lapse would delete files we never installed.
  *
  * Deliberately a separate pref from the entitlement snapshot
- * (`extensions.theciteshop.cacheValid`), which is cleared the moment a licence
+ * (`extensions.theciteshop.cacheValid`), which is cleared the moment a license
  * goes invalid — precisely when we need to know what to remove.
  */
 const PREF_LEDGER = "extensions.theciteshop.managedStyles";
@@ -112,7 +112,7 @@ class StyleLedger {
       parsed.v !== LEDGER_VERSION ||
       !Array.isArray(parsed.entries)
     ) {
-      csLog("WARN", "Ledger envelope unrecognised — treating as empty");
+      csLog("WARN", "Ledger envelope unrecognized — treating as empty");
       return [];
     }
 
@@ -250,7 +250,7 @@ class StyleLedger {
       try {
         // Re-fetch inside the loop: style.remove() ends with Styles.reinit(),
         // so anything captured before this iteration is stale. For the same
-        // reason removals must stay serialised — never Promise.all.
+        // reason removals must stay serialized — never Promise.all.
         //
         // skipMappings=true is mandatory. Without it Zotero applies its
         // renamed-style map and can hand back a DIFFERENT style than the one

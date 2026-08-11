@@ -9,7 +9,7 @@ const DAILY_CHECK_MS = 24 * 60 * 60 * 1000;
 /**
  * Keeps the first check clear of Zotero's own startup network contention and
  * of the first-install prefs pane, which opens ~1s in while the user is still
- * typing their licence key.
+ * typing their license key.
  */
 const STARTUP_CHECK_DELAY_MS = 15_000;
 
@@ -203,7 +203,7 @@ export async function runEnforcementCheck(
 
       // Reconcile: a style dropped from the entitlement (e.g. one item
       // refunded from a multi-style subscription) is removed even though the
-      // licence is live.
+      // license is live.
       //
       // Two guards, both load-bearing. "keep" is also reachable for a
       // transient outcome when the clock is unset, where `styles` is

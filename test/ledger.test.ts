@@ -45,7 +45,7 @@ describe("styleLedger", function () {
     assert.deepEqual(styleLedger.read(), []);
   });
 
-  it("rejects an unrecognised envelope version", function () {
+  it("rejects an unrecognized envelope version", function () {
     setRaw(JSON.stringify({ v: 99, entries: [entry()] }));
     assert.deepEqual(styleLedger.read(), []);
   });
