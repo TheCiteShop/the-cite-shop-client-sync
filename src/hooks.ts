@@ -2,6 +2,7 @@ import { version } from "../package.json";
 import { StyleCredentials, customStylesManager } from "./modules/customStyles";
 import {
   enforceAuthoritativeRefusal,
+  removeAllShopStyles,
   runEnforcementCheck,
   scheduleStartupCheck,
   startEnforcementTimer,
@@ -388,7 +389,7 @@ async function onPrefsEvent(type: string, data: { [key: string]: any }) {
         csLog("INFO", "User cancelled credential clearing");
         return;
       }
-      const report = await styleLedger.removeAll("logout");
+      const report = await removeAllShopStyles("logout");
       csLog("INFO", `Logout removed ${report.removed.length} style(s)`);
     }
 

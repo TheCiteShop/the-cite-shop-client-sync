@@ -139,8 +139,33 @@ export function notifyStylesRemoved(
   }
 }
 
+function mergeReports(a: RemovalReport, b: RemovalReport): RemovalReport {
+  return {
+    removed: [...a.removed, ...b.removed],
+    alreadyGone: [...a.alreadyGone, ...b.alreadyGone],
+    failed: [...a.failed, ...b.failed],
+    skipped: [...a.skipped, ...b.skipped],
+    aborted: a.aborted ?? b.aborted,
+  };
+}
+
 /**
- * Act on an authoritative refusal that was obtained outside the normal check —
+ * The single removal entry point: everything the ledger tracks, plus any
+ * untracked file that is provably one of ours by content hash.
+ *
+ * Used by every path that removes styles so tracked and untracked can never
+ * drift apart.
+ */
+export async function removeAllShopStyles(
+  reason: RemovalReason,
+): Promise<RemovalReport> {
+  const tracked = await styleLedger.removeAll(reason);
+  const untracked = await styleLedger.removeUntrackedMatches(reason);
+  return mergeReports(tracked, untracked);
+}
+
+/**
+ * Act on an authoritative refusal obtained outside the normal check —
  * currently the Verify button, which validates typed values directly.
  *
  * Kept here rather than inlined at the call site so the removal reason and the
@@ -150,11 +175,10 @@ export async function enforceAuthoritativeRefusal(
   outcome: LicenseOutcome,
 ): Promise<RemovalReport | null> {
   if (outcome !== "expired" && outcome !== "invalid-credentials") return null;
-  if (styleLedger.count() === 0) return null;
 
   const reason = removalReasonFor(outcome);
-  csLog("WARN", `Authoritative refusal (${outcome}) — removing managed styles`);
-  const report = await styleLedger.removeAll(reason);
+  csLog("WARN", `Authoritative refusal (${outcome}) — removing shop styles`);
+  const report = await removeAllShopStyles(reason);
   notifyStylesRemoved(reason, report);
   return report;
 }
@@ -180,7 +204,7 @@ export async function runEnforcementCheck(
     if (!creds) {
       if (styleLedger.count() > 0) {
         csLog("WARN", "Managed styles present but no credentials — removing");
-        const report = await styleLedger.removeAll("no-credentials");
+        const report = await removeAllShopStyles("no-credentials");
         notifyStylesRemoved("no-credentials", report);
         return {
           outcome: "invalid-credentials",
@@ -245,7 +269,7 @@ export async function runEnforcementCheck(
       }
     } else if (decision.action === "uninstall") {
       const reason = removalReasonFor(validation.outcome);
-      report = await styleLedger.removeAll(reason);
+      report = await removeAllShopStyles(reason);
       notifyStylesRemoved(reason, report, decision.daysElapsed);
     }
 

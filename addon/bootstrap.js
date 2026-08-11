@@ -131,6 +131,7 @@ async function uninstall(data, reason) {
     Zotero.Prefs.clear("extensions.theciteshop.email");
     Zotero.Prefs.clear("extensions.theciteshop.lastSyncOk");
     Zotero.Prefs.clear("extensions.theciteshop.cacheValid");
+    Zotero.Prefs.clear("extensions.theciteshop.styleHashes");
     Zotero.Prefs.clear("extensions.theciteshop.installed");
 
     // Keep the ledger if anything survived, so a later reinstall can finish

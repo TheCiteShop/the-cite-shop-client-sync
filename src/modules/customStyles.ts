@@ -1,5 +1,6 @@
 import { getString } from "../utils/locale";
 import { getColors } from "../utils/theme";
+import { sha256Hex } from "../utils/hash";
 import { csLog } from "../utils/logger";
 import { getApiBase } from "./license";
 import { styleLedger } from "./styleLedger";
@@ -35,17 +36,6 @@ function styleQuery(creds: StyleCredentials): string {
 }
 
 class CustomStylesManager {
-  // ─── Crypto ───────────────────────────────────────────────────
-
-  private async computeSHA256(content: string): Promise<string> {
-    const encoder = new TextEncoder();
-    const data = encoder.encode(content);
-    const buffer = await crypto.subtle.digest("SHA-256", data);
-    return Array.from(new Uint8Array(buffer))
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join("");
-  }
-
   // ─── Remote API ───────────────────────────────────────────────
 
   private async fetchWithTimeout(url: string, timeoutMs = 10000): Promise<any> {
@@ -76,12 +66,22 @@ class CustomStylesManager {
       throw new Error("Style list response was not an array");
     }
     csLog("INFO", `Remote styles fetched: ${styles.length} styles`);
-    return styles.map((s: any) => ({
+    const mapped = styles.map((s: any) => ({
       id: s.id,
       name: s.name,
       remoteDate: s.updated ? new Date(s.updated) : null,
       hash: s.hash ?? "",
     }));
+
+    // Remember every fingerprint the server serves, so removal can later
+    // recognize one of our files even if this plugin never installed it.
+    styleLedger.recordHashes(
+      Object.fromEntries(
+        mapped.filter((s) => s.hash).map((s) => [s.id, s.hash]),
+      ),
+    );
+
+    return mapped;
   }
 
   private async fetchRemoteStyleContent(
@@ -95,7 +95,7 @@ class CustomStylesManager {
     const data = response.response as unknown as { content: string };
     if (!data.content) throw new Error("No content in response");
 
-    const actualHash = await this.computeSHA256(data.content);
+    const actualHash = await sha256Hex(data.content);
     if (actualHash !== expectedHash) {
       csLog(
         "ERROR",

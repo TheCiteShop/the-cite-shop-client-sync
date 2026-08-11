@@ -1,3 +1,4 @@
+import { sha256Hex } from "../utils/hash";
 import { csLog } from "../utils/logger";
 
 /**
@@ -13,6 +14,22 @@ import { csLog } from "../utils/logger";
  */
 const PREF_LEDGER = "extensions.theciteshop.managedStyles";
 const LEDGER_VERSION = 1;
+
+/**
+ * Fingerprints of styles the shop has served: `{ shopId: sha256 }`.
+ *
+ * Lets removal recognize a file as ours even when this plugin did not install
+ * it — a customer who copies a .csl between machines by hand is otherwise
+ * never tracked, which is a permanent bypass.
+ *
+ * A matching id proves nothing on its own: shop styles use the same
+ * `http://www.zotero.org/styles/` namespace as the public repository, so a
+ * customer can legitimately hold a different style under the same id. Only the
+ * content hash proves ownership.
+ *
+ * Deliberately survives a lapse, for the same reason the ledger does.
+ */
+const PREF_HASHES = "extensions.theciteshop.styleHashes";
 
 export interface LedgerEntry {
   /** Style id as the shop API knows it (`StyleData.id`). */
@@ -194,6 +211,110 @@ class StyleLedger {
       );
       this.write(kept);
     }
+  }
+
+  // ─── Style fingerprints ───────────────────────────────────────
+
+  readHashes(): Record<string, string> {
+    try {
+      const raw = Zotero.Prefs.get(PREF_HASHES);
+      if (typeof raw !== "string" || !raw) return {};
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === "object" ? parsed : {};
+    } catch (e) {
+      csLog("ERROR", "Style hash catalog unreadable:", e);
+      return {};
+    }
+  }
+
+  /** Merge in fingerprints seen from the server; never drops known ones. */
+  recordHashes(map: Record<string, string>): void {
+    const entries = Object.entries(map).filter(
+      ([id, hash]) => id && typeof hash === "string" && hash.length === 64,
+    );
+    if (!entries.length) return;
+    try {
+      const merged = { ...this.readHashes(), ...Object.fromEntries(entries) };
+      Zotero.Prefs.set(PREF_HASHES, JSON.stringify(merged));
+    } catch (e) {
+      csLog("ERROR", "Style hash catalog write failed:", e);
+    }
+  }
+
+  clearHashes(): void {
+    Zotero.Prefs.clear(PREF_HASHES);
+  }
+
+  /**
+   * Remove installed styles that are provably ours but were never recorded —
+   * typically a .csl copied between machines by hand, which the ledger cannot
+   * see.
+   *
+   * A style is only removed when its id matches a shop style AND its content
+   * hashes to what the server served. A customer's own style sharing the same
+   * id hashes differently and is left strictly alone.
+   *
+   * Does not touch the ledger: by definition nothing here is in it.
+   */
+  async removeUntrackedMatches(reason: RemovalReason): Promise<RemovalReport> {
+    const report: RemovalReport = {
+      removed: [],
+      alreadyGone: [],
+      failed: [],
+      skipped: [],
+    };
+
+    const hashes = this.readHashes();
+    const shopIds = Object.keys(hashes);
+    if (!shopIds.length) return report;
+
+    const styles = getStylesApi();
+    if (!styles) {
+      report.aborted = "no-styles-api";
+      return report;
+    }
+    if (!stylesLoaded(styles)) {
+      report.aborted = "styles-not-loaded";
+      return report;
+    }
+
+    const tracked = new Set(this.read().map((e) => e.styleID));
+
+    for (const shopId of shopIds) {
+      const styleID = `http://www.zotero.org/styles/${shopId}`;
+      // Already handled by removeAll().
+      if (tracked.has(styleID)) continue;
+
+      try {
+        const style = styles.get(styleID, true);
+        if (!style) continue;
+        if (style.styleID !== styleID) continue;
+        if (!style.path) {
+          report.skipped.push(styleID);
+          continue;
+        }
+
+        const content = await Zotero.File.getContentsAsync(style.path);
+        const actual = await sha256Hex(String(content));
+        if (actual !== hashes[shopId]) {
+          csLog(
+            "INFO",
+            `Leaving ${styleID} alone — content is not one of ours`,
+          );
+          report.skipped.push(styleID);
+          continue;
+        }
+
+        await style.remove();
+        csLog("WARN", `Removed untracked shop style ${styleID} (${reason})`);
+        report.removed.push(styleID);
+      } catch (e) {
+        csLog("ERROR", `Failed to remove untracked ${styleID}:`, e);
+        report.failed.push(styleID);
+      }
+    }
+
+    return report;
   }
 
   async removeAll(reason: RemovalReason): Promise<RemovalReport> {

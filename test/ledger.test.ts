@@ -1,8 +1,30 @@
 import { assert } from "chai";
 import { LedgerEntry, styleLedger } from "../src/modules/styleLedger";
 import { enforceAuthoritativeRefusal } from "../src/modules/enforcement";
+import { sha256Hex } from "../src/utils/hash";
 
 const PREF = "extensions.theciteshop.managedStyles";
+
+// A real, installable CSL used to prove the hash check both removes our file
+// and spares one that merely shares the id. Declared at module scope because
+// mocha/no-setup-in-describe forbids the join() inside a describe block.
+const SHOP_ID = "tcs-hash-test";
+const STYLE_ID = "http://www.zotero.org/styles/" + SHOP_ID;
+const CSL = [
+  '<?xml version="1.0" encoding="utf-8"?>',
+  '<style xmlns="http://purl.org/net/xbiblio/csl" class="in-text" version="1.0" default-locale="en-US">',
+  "  <info>",
+  "    <title>TCS Hash Test</title>",
+  "    <id>" + STYLE_ID + "</id>",
+  "    <updated>2026-01-01T00:00:00+00:00</updated>",
+  "  </info>",
+  "  <citation>",
+  "    <layout>",
+  '      <text variable="title"/>',
+  "    </layout>",
+  "  </citation>",
+  "</style>",
+].join("\n");
 
 function setRaw(value: string) {
   Zotero.Prefs.set(PREF, value);
@@ -139,6 +161,49 @@ describe("styleLedger", function () {
     assert.doesNotThrow(() => styleLedger.prune());
   });
 
+  // The hash is what separates "a style with our id" from "our style". Getting
+  // this wrong deletes a customer's own file, so both directions are tested.
+  describe("removeUntrackedMatches", function () {
+    afterEach(async function () {
+      Zotero.Prefs.clear("extensions.theciteshop.styleHashes");
+      const leftover = (Zotero as any).Styles.get(STYLE_ID, true);
+      if (leftover && leftover.path) await leftover.remove();
+    });
+
+    it("returns an empty report when no fingerprints are known", async function () {
+      const report = await styleLedger.removeUntrackedMatches("expired");
+      assert.lengthOf(report.removed, 0);
+      assert.isUndefined(report.aborted);
+    });
+
+    it("removes an untracked style whose content hash matches", async function () {
+      await (Zotero as any).Styles.install(CSL, null, true);
+      const installed = (Zotero as any).Styles.get(STYLE_ID, true);
+      if (!installed) this.skip();
+
+      const onDisk = String(await Zotero.File.getContentsAsync(installed.path));
+      styleLedger.recordHashes({ [SHOP_ID]: await sha256Hex(onDisk) });
+
+      const report = await styleLedger.removeUntrackedMatches("expired");
+      assert.include(report.removed, STYLE_ID);
+      assert.isNotOk((Zotero as any).Styles.get(STYLE_ID, true));
+    });
+
+    // The important one: a customer's own style sharing our id must survive.
+    it("leaves a same-id style alone when the hash differs", async function () {
+      await (Zotero as any).Styles.install(CSL, null, true);
+      const installed = (Zotero as any).Styles.get(STYLE_ID, true);
+      if (!installed) this.skip();
+
+      styleLedger.recordHashes({ [SHOP_ID]: "0".repeat(64) });
+
+      const report = await styleLedger.removeUntrackedMatches("expired");
+      assert.lengthOf(report.removed, 0);
+      assert.include(report.skipped, STYLE_ID);
+      assert.isOk((Zotero as any).Styles.get(STYLE_ID, true));
+    });
+  });
+
   // Regression: the Verify button reported "license is no longer active" while
   // leaving the styles installed, because it deliberately bypasses the normal
   // enforcement check. An authoritative refusal must remove them whatever path
@@ -170,8 +235,13 @@ describe("styleLedger", function () {
       assert.equal(styleLedger.count(), 1);
     });
 
-    it("is a no-op when nothing is managed", async function () {
-      assert.isNull(await enforceAuthoritativeRefusal("expired"));
+    // Returns a report rather than null even with an empty ledger: there may
+    // still be untracked files to sweep by hash, so this path must run.
+    it("removes nothing when there is nothing to remove", async function () {
+      const report = await enforceAuthoritativeRefusal("expired");
+      assert.isNotNull(report);
+      assert.lengthOf(report!.removed, 0);
+      assert.lengthOf(report!.failed, 0);
     });
   });
 });
