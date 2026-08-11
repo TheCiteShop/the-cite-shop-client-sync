@@ -151,6 +151,34 @@ class CustomStylesManager {
   }
 
   /**
+   * Find an installed style with the same title but a different id — Zotero
+   * will delete it during install. Returns null when there is none.
+   */
+  private findTitleClash(
+    zotero: any,
+    title: string | undefined,
+    cslId: string,
+  ): any | null {
+    if (!title) return null;
+    try {
+      const all = zotero.Styles.getAll();
+      for (const key of Object.keys(all)) {
+        const candidate = all[key];
+        if (
+          candidate &&
+          candidate.title === title &&
+          candidate.styleID !== cslId
+        ) {
+          return candidate;
+        }
+      }
+    } catch (e) {
+      csLog("WARN", "Could not scan for a title clash:", e);
+    }
+    return null;
+  }
+
+  /**
    * Installs a style and records it in the ownership ledger.
    *
    * @returns false if the user declined to replace an existing style.
@@ -193,6 +221,28 @@ class CustomStylesManager {
       if (!proceed) {
         csLog("INFO", `User declined to replace existing style ${cslId}`);
         return false;
+      }
+    } else {
+      // Zotero's install also deletes any existing style that merely shares
+      // the TITLE, even under a completely different id — see style.js,
+      // "also look for an existing style with the same title", followed by an
+      // unconditional existingFile.remove(). The id check above cannot catch
+      // that, so without this the customer silently loses an unrelated style.
+      const titleClash = this.findTitleClash(zotero, cslTitle, cslId);
+      if (titleClash) {
+        const proceed = win.confirm(
+          getString("status-replace-title-clash", {
+            args: { name: titleClash.title },
+          }),
+        );
+        if (!proceed) {
+          csLog("INFO", `User declined title clash with ${titleClash.styleID}`);
+          return false;
+        }
+        csLog(
+          "WARN",
+          `Installing ${cslId} will delete ${titleClash.styleID} (same title)`,
+        );
       }
     }
 

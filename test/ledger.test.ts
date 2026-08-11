@@ -181,8 +181,19 @@ describe("styleLedger", function () {
       const installed = (Zotero as any).Styles.get(STYLE_ID, true);
       if (!installed) this.skip();
 
+      // Hash the ORIGINAL string, exactly as the server does over the .csl it
+      // serves. Production stores that hash, so if Zotero ever stopped writing
+      // style content verbatim the sweep would silently match nothing — which
+      // is why this asserts the round trip rather than hashing the file back.
+      const serverHash = await sha256Hex(CSL);
       const onDisk = String(await Zotero.File.getContentsAsync(installed.path));
-      styleLedger.recordHashes({ [SHOP_ID]: await sha256Hex(onDisk) });
+      assert.equal(
+        await sha256Hex(onDisk),
+        serverHash,
+        "Zotero must write style content byte-for-byte, or stored server hashes never match on disk",
+      );
+
+      styleLedger.recordHashes({ [SHOP_ID]: serverHash });
 
       const report = await styleLedger.removeUntrackedMatches("expired");
       assert.include(report.removed, STYLE_ID);

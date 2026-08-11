@@ -34,6 +34,7 @@ status-server-unreachable = Lizenzserver konnte nicht erreicht werden. Bitte pr�
 status-server-error = Der Lizenzserver ist vorübergehend nicht verfügbar. Bitte später erneut versuchen.
 status-last-synced = Zuletzt geprüft: { $date }
 status-replace-existing = Ein Zitierstil mit dieser ID ist bereits in Zotero installiert („{ $name }"). Bei der Installation wird er ersetzt und entfernt, wenn Ihr Abonnement endet. Fortfahren?
+status-replace-title-clash = Ein anderer Zitierstil mit dem Namen „{ $name }" ist bereits installiert. Zotero behandelt Stile mit demselben Namen als denselben Stil, daher wird er bei dieser Installation gelöscht. Fortfahren?
 status-logout-will-remove = Beim Löschen Ihrer Zugangsdaten werden außerdem { $count } gekaufte Stil(e) aus Zotero entfernt. Fortfahren?
 
 # ── Entfernungs-Benachrichtigung (Popup) ─────────────────────────

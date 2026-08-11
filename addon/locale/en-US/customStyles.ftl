@@ -34,6 +34,7 @@ status-server-unreachable = Could not reach the license server. Please check you
 status-server-error = The license server is temporarily unavailable. Please try again later.
 status-last-synced = Last verified: { $date }
 status-replace-existing = A citation style with this ID is already installed in Zotero ("{ $name }"). Installing will replace it, and it will be removed if your subscription ends. Continue?
+status-replace-title-clash = A different citation style named "{ $name }" is already installed. Zotero treats styles sharing a name as the same style, so installing this one will delete it. Continue?
 status-logout-will-remove = Clearing your credentials will also remove { $count } purchased style(s) from Zotero. Continue?
 
 # ── Removal notification (popup) ─────────────────────────────────
