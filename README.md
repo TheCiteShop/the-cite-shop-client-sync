@@ -3,7 +3,7 @@
 A Zotero plugin that allows you to install and manage your purchased custom citation styles directly within Zotero.
 
 Please download the latest version of the plugin here:
-[https://github.com/TheCiteShop/theciteshop-client-sync/releases](https://github.com/TheCiteShop/theciteshop-client-sync/releases)
+[https://github.com/TheCiteShop/the-cite-shop-client-sync/releases](https://github.com/TheCiteShop/the-cite-shop-client-sync/releases)
 
 ![The Cite Shop Client Sync - install, update, reinstall](./assets/screenshots/The%20Cite%20Shop%20Client%20Sync%20-%20install,%20update,%20reinstall.png)
 
@@ -16,7 +16,7 @@ Please download the latest version of the plugin here:
 
 ## Installation
 
-1. Download the latest `.xpi` file from the [releases page](https://github.com/TheCiteShop/theciteshop-client-sync/releases)
+1. Download the latest `.xpi` file from the [releases page](https://github.com/TheCiteShop/the-cite-shop-client-sync/releases)
 2. In Zotero, go to **Tools → Plugins**
 3. Click the gear icon and select **Install Plugin From File…**
 4. Select the downloaded `.xpi` file

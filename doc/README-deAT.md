@@ -11,7 +11,7 @@ Ein Zotero-Plugin, mit dem Sie Ihre gekauften Zitierstile direkt in Zotero insta
 
 ## Installation
 
-1. Laden Sie die aktuelle `.xpi`-Datei von der [Releases-Seite](https://github.com/TheCiteShop/theciteshop-client-sync/releases) herunter
+1. Laden Sie die aktuelle `.xpi`-Datei von der [Releases-Seite](https://github.com/TheCiteShop/the-cite-shop-client-sync/releases) herunter
 2. Öffnen Sie in Zotero **Werkzeuge → Plugins**
 3. Klicken Sie auf das Zahnrad-Symbol und wählen Sie **Plugin aus Datei installieren…**
 4. Wählen Sie die heruntergeladene `.xpi`-Datei aus

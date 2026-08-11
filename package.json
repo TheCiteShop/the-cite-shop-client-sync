@@ -1,5 +1,5 @@
 {
-  "name": "theciteshop-client-sync",
+  "name": "the-cite-shop-client-sync",
   "type": "module",
   "version": "0.0.1",
   "description": "A Zotero plugin for managing and installing custom citation styles from The Cite Shop.",
@@ -12,7 +12,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/TheCiteShop/theciteshop-client-sync.git"
+    "url": "git+https://github.com/TheCiteShop/the-cite-shop-client-sync.git"
   },
   "author": {
     "name": "The Cite Shop",
@@ -20,7 +20,7 @@
     "url": "https://theciteshop.com/"
   },
   "bugs": {
-    "url": "https://github.com/TheCiteShop/theciteshop-client-sync/issues"
+    "url": "https://github.com/TheCiteShop/the-cite-shop-client-sync/issues"
   },
   "homepage": "https://theciteshop.com/",
   "license": "AGPL-3.0-or-later",

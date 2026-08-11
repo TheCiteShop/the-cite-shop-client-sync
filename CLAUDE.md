@@ -4,7 +4,7 @@
 
 This is a Zotero plugin that enables users to install and manage custom citation styles directly within Zotero. The plugin authenticates users via license keys, validates their credentials, and provides an interface for installing and updating purchased custom styles.
 
-**Repository:** https://github.com/TheCiteShop/theciteshop-client-sync
+**Repository:** https://github.com/TheCiteShop/the-cite-shop-client-sync
 **Plugin ID:** `theciteshop-sync@theciteshop.com`
 **License:** AGPL-3.0-or-later
 **Version:** see `package.json` (currently 0.0.1)
@@ -370,4 +370,4 @@ bypass.
 **Author:** The Cite Shop
 **Email:** info@theciteshop.com
 **Website:** https://theciteshop.com
-**Issues:** https://github.com/TheCiteShop/theciteshop-client-sync/issues
+**Issues:** https://github.com/TheCiteShop/the-cite-shop-client-sync/issues
