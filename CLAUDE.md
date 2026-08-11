@@ -51,6 +51,7 @@ This is a Zotero plugin that enables users to install and manage custom citation
 │       ├── ztoolkit.ts          # Zotero toolkit wrapper
 │       ├── locale.ts            # i18n localization strings
 │       ├── logger.ts            # In-memory log ring (Copy Logs button)
+│       ├── hash.ts              # sha256Hex — must match the backend's hash()
 │       ├── theme.ts             # Light/dark color palette
 │       └── window.ts            # Window management utilities
 │
@@ -101,23 +102,39 @@ Manages style installation, rendering, and updates.
 
 **Key Functions:**
 
-- `renderStylesInPrefs(doc, win, container, statusEl, licenseKey)` — Display available styles; throws if the list cannot be fetched
+- `renderStylesInPrefs(doc, win, container, statusEl, creds)` — Display available styles; throws if the list cannot be fetched
 - `renderInstalledFromLedger(doc, container)` — Read-only list used during the offline tolerance window
-- `checkAndInstallUpdates(doc, win, container, statusEl, licenseKey)` — Fetch and install style updates
+- `checkAndInstallUpdates(doc, win, container, statusEl, creds)` — Fetch and install style updates
 - `installStyleToZotero(shopId, styleContent, win)` — Install a style and record it in the ownership ledger. Parses the CSL `<id>`/`<title>` from the file itself; returns `false` if the user declined to replace an existing style.
+
+`creds` is a `StyleCredentials` (`licenseKey`, `email`, `zoteroUserId`) — the style endpoints verify all three, not just the key.
+
+**Two collisions are confirmed before installing**, because Zotero's `install()` deletes an existing style matched by id, filename, **or title**, then removes that file unconditionally (`style.js`, ~line 429 and 515):
+
+- same CSL `<id>` → recorded as `preexisting: true`
+- same **title**, different id → `findTitleClash()`; the customer would otherwise silently lose an unrelated style
 
 ### Style Ledger (`src/modules/styleLedger.ts`)
 
-The record of which styles **this plugin** installed. Zotero keeps no provenance, so without it an uninstall would delete styles the customer installed themselves. Stored in `extensions.theciteshop.managedStyles`, deliberately separate from the entitlement snapshot because that snapshot is cleared the moment a license goes invalid.
+Provenance for removal. Zotero keeps none, so without this an uninstall would delete styles the customer installed themselves. Two prefs, both deliberately surviving a lapse — they are needed precisely when the entitlement snapshot has been cleared:
+
+- `extensions.theciteshop.managedStyles` — what this plugin installed
+- `extensions.theciteshop.styleHashes` — `{ shopId: sha256 }` of every style the server has served
+
+**A matching style id proves nothing.** Shop styles use the same `http://www.zotero.org/styles/` namespace as the public repository, so a customer may legitimately hold a different style under one of our ids. Only the content hash proves ownership.
 
 - `read()` never throws — a throw would take down the startup check
 - `record()` upserts by `styleID` and never flips `preexisting` back to false
 - `prune()` is lazy (Zotero has no notifier event for styles) and its styles-loaded probe gates the **whole** prune, not each entry
-- `removeAll(reason)` / `removeSome(ids, reason)` — `reason` is mandatory so every deletion is logged with a justification
+- `removeAll(reason)` — ledger entries only
+- `removeUntrackedMatches(reason)` — files we never installed but which hash to a style we served (catches a `.csl` hand-copied between machines); a same-id style with different contents is skipped
+- `reason` is mandatory throughout, so every deletion is logged with a justification
 
 ### Enforcement (`src/modules/enforcement.ts`)
 
 - `decideAction(outcome, lastSyncOk, now, ledgerCount, tolerance)` — **Pure** and unit-tested
+- `removeAllShopStyles(reason)` — **the single removal entry point**: ledger + hash-verified untracked. Every path (background check, Verify, logout, missing credentials) goes through it so the two can never drift apart
+- `enforceAuthoritativeRefusal(outcome)` — used by the Verify button, which validates typed values directly and so bypasses `runEnforcementCheck`
 - `runEnforcementCheck(trigger)` — re-entrancy guarded via `addon.data.license.enforcing`
 - `startEnforcementTimer()` — chained `setTimeout`, called only from `onStartup` (never per-window)
 
@@ -283,7 +300,13 @@ Localization strings are stored in `addon/locale/` and referenced via `getString
 
 ## Testing
 
-Tests are written in Mocha + Chai in `test/startup.test.ts`.
+Tests are written in Mocha + Chai and run inside a real Zotero instance.
+
+```bash
+npx zotero-plugin test --exit-on-finish   # 41 passing
+```
+
+Plain `npm test` stays in watch mode and never exits on its own.
 
 **Key Test Requirement:**
 
@@ -293,7 +316,7 @@ Test files:
 
 - `test/startup.test.ts` — smoke test
 - `test/enforcement.test.ts` — table-driven `classifyResponse` and `decideAction`
-- `test/ledger.test.ts` — ledger round-trip, corruption handling, and removal
+- `test/ledger.test.ts` — ledger round-trip, corruption handling, removal, and the hash sweep (installs a real CSL and asserts it is removed on a hash match and **spared** on a mismatch)
 
 The two pure functions carry the real risk: they decide whether a customer's
 files get deleted. Prefer extending those tables over integration tests.
@@ -316,8 +339,18 @@ could ever run.
 **Backend contract.** `POST /license/validate` must return HTTP 200 for every
 entitlement _decision_, with `status` (`active`/`expired`/`invalid`) and
 `authoritative: true`. Non-2xx is reserved for infrastructure failures and 429.
+`authoritative` is the load-bearing field: without it the client classifies the
+response as `server-error` and never enforces, which is what stops a WAF or CDN
+403 being mistaken for a revocation.
+
 `GET /styles` and `/styles/{id}` must 403 lapsed subscriptions, or the pane
-would re-download what was just removed.
+would re-download what was just removed. Both also require `email` and
+`zotero_user_id` alongside `license_key` and apply the same binding as
+validation — the endpoint URLs are public (AGPL source, and the XPI is a zip),
+so key secrecy alone protected the paid CSL files.
+
+**Plugin and backend must ship together.** An older plugin build does not send
+the new style-endpoint parameters and will receive 403s.
 
 **Dev-only prefs**, all gated on `__env__ === "development"`:
 `extensions.theciteshop.debug.{forceOutcome,checkIntervalMs,toleranceMs,apiBase}`.

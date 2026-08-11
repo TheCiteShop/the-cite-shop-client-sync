@@ -28,13 +28,32 @@ If you deliberately test against a real profile, back it up first:
 cp -r "$(cygpath "$(node -e 'console.log(process.env.USERPROFILE)')")/Zotero/styles" ~/zotero-styles-backup
 ```
 
-### Only managed styles are ever removed
+### Only shop styles are ever removed
 
-Removal is driven exclusively by the ownership ledger
-(`extensions.theciteshop.managedStyles`), which is written only by
-`installStyleToZotero`. A style the plugin did not install has no ledger entry
-and is never touched. **Test 6 is the regression test for this** and is the most
-important test in the file — if it ever fails, stop and fix before shipping.
+Removal has exactly two sources, and nothing else is ever touched:
+
+1. **The ownership ledger** (`extensions.theciteshop.managedStyles`) — written
+   only by `installStyleToZotero`.
+2. **Hash-verified untracked files** (`extensions.theciteshop.styleHashes`) — a
+   file whose id matches a shop style **and** whose contents hash to what the
+   server served. This catches a `.csl` copied between machines by hand, which
+   the ledger cannot see.
+
+A matching id is never sufficient. Shop styles use the same
+`http://www.zotero.org/styles/` namespace as the public repository, so a
+customer may hold a different style under one of our ids — it hashes
+differently and is skipped.
+
+**Test 6 is the regression test for this** and is the most important test in
+the file. If it ever fails, stop and fix before shipping.
+
+### Zotero's Cite pane does not refresh itself
+
+After a removal, Zotero's own **Settings → Cite** list may still show the
+style until that window is closed and reopened. The file _is_ gone —
+`style.remove()` deletes it and calls `Zotero.Styles.reinit()`. Zotero renders
+that list once on open and there is no notifier event for styles, so it cannot
+know to redraw. Expected, not a bug. The plugin's own list clears correctly.
 
 ---
 
@@ -101,6 +120,9 @@ JSON.parse(
 );
 Zotero.Prefs.get("extensions.theciteshop.lastSyncOk");
 
+// Inspect the style fingerprint catalog
+JSON.parse(Zotero.Prefs.get("extensions.theciteshop.styleHashes") || "{}");
+
 // Reset everything
 [
   "licenseKey",
@@ -108,6 +130,7 @@ Zotero.Prefs.get("extensions.theciteshop.lastSyncOk");
   "lastSyncOk",
   "cacheValid",
   "managedStyles",
+  "styleHashes",
   "installed",
 ].forEach((k) => Zotero.Prefs.clear("extensions.theciteshop." + k));
 ```
@@ -120,17 +143,29 @@ Zotero.Prefs.clear("extensions.theciteshop.debug.forceOutcome");
 
 ---
 
-## 3. Backend prerequisite
+## 3. Backend contract
 
-Until `POST /license/validate` returns `status` and `authoritative: true`,
-`classifyResponse` maps **every** response to `server-error` and nothing is ever
-removed. That is the intended safety interlock (see
-`test/enforcement.test.ts` → "degrades legacy valid:false to server-error"), but
-it means a real end-to-end expiry test is impossible against the current
-backend. Use `debug.forceOutcome` until the backend ships.
+**Live and verified end to end on 2026-08-11**: cancelling the subscription
+deactivates the license, and the plugin removes the style and shows the sticky
+popup.
 
-`GET /styles` and `/styles/{id}` must also 403 lapsed subscriptions, or the
-prefs pane will re-download whatever was just removed. **Test 9 covers this.**
+`POST /license/validate` returns `status` (`active`/`expired`/`invalid`) with
+`authoritative: true` on HTTP 200 for every entitlement decision. If
+`authoritative` is ever missing, `classifyResponse` maps the response to
+`server-error` and **nothing is removed** — the deliberate interlock that stops
+a WAF or CDN 403 being read as a revocation (see `test/enforcement.test.ts` →
+"degrades legacy valid:false to server-error"). If enforcement mysteriously
+stops firing, check that field first.
+
+`GET /styles` and `/styles/{id}` 403 lapsed subscriptions, or the prefs pane
+would re-download whatever was just removed (**test 9**). They also require
+`email` and `zotero_user_id` alongside `license_key`.
+
+> **Ship the plugin and backend together.** An older plugin build does not send
+> the style-endpoint parameters and will receive 403s on every style request.
+
+`debug.forceOutcome` remains the fastest way to exercise outcomes the backend
+cannot easily produce on demand — 429, 5xx, timeouts.
 
 ---
 
@@ -142,10 +177,11 @@ npx zotero-plugin test --exit-on-finish
 
 `npm test` alone stays in watch mode and will not exit on its own.
 
-Expected: **34 passing.** These cover the two pure functions —
+Expected: **41 passing.** These cover the two pure functions —
 `classifyResponse` and `decideAction` — which encode every decision that can
-delete a customer's files. Extend those tables in preference to adding
-integration tests.
+delete a customer's files, plus the hash sweep, which installs a real CSL into
+Zotero and asserts it is removed on a hash match and **spared** on a mismatch.
+Extend those tables in preference to adding integration tests.
 
 ---
 
@@ -167,9 +203,13 @@ Run with `npm start`. Reset state between tests using the snippet above.
 | 10  | Style deleted by hand            | Remove via Zotero's Cite pane, then run a check             | No error; ledger prunes silently                                                |
 | 11  | ID collision                     | See §7                                                      | Confirmation dialog before replacing                                            |
 | 12  | Logout                           | Clear Credentials with styles installed                     | Confirm dialog naming the count → removal                                       |
-| 13  | Plugin uninstall                 | Tools → Plugins → Remove                                    | Managed styles removed                                                          |
+| 13  | Plugin uninstall                 | Tools → Plugins → Remove                                    | Managed styles removed (ledger only — no hash sweep, see §9)                    |
 | 14  | Unset clock                      | Clear `lastSyncOk`, `forceOutcome = unreachable`            | **Keeps** styles — a missing timestamp is not evidence of a lapse               |
 | 15  | Timer fires                      | `debug.checkIntervalMs = 10000`                             | Check repeats; only one timer runs                                              |
+| 16  | Untracked copy is swept          | Install, then clear `managedStyles` only, then force expiry | Removed anyway — the hash still identifies it as ours                           |
+| 17  | Title clash                      | Install a style titled exactly like a purchased one         | Dialog warns it will be **deleted**; declining aborts the install               |
+| 18  | Verify on a dead license         | Deactivate in LMFWC, then click Verify                      | Message **and** removal — Verify enforces when creds match the saved ones       |
+| 19  | Verify with a wrong key          | Type a bad key while holding a valid saved one              | Error only — installed styles **untouched**                                     |
 
 To trigger a check without restarting Zotero, open the plugin's settings pane —
 that runs `runEnforcementCheck("prefs")`.
@@ -202,25 +242,54 @@ every removal path.
 
 > Note: The Cite Shop's own styles use the same `http://www.zotero.org/styles/…`
 > ID namespace as the public repository, so an ID alone does not tell you who
-> installed a style. Provenance comes from the ledger and nothing else — which
-> is exactly why the ledger exists.
+> installed a style. Provenance comes from the ledger, or from the content hash
+> — never from the ID.
+
+For the strongest version of this test, use a style of the customer's that
+shares an ID with one you sell. Removal must skip it, because its contents
+hash differently:
+
+```js
+// after a forced expiry, the report should list it under `skipped`, not `removed`
+```
+
+Confirm in the log (**Copy Logs**) that it reports
+`Leaving http://www.zotero.org/styles/… alone — content is not one of ours`.
 
 ---
 
-## 7. Test 11 — ID collision
+## 7. Tests 11 and 17 — install collisions
 
-Because the shop reuses the public ID namespace, a purchased style can share its
-CSL `<id>` with one the customer already has. Zotero's `install()` overwrites the
-existing file, so the plugin asks first.
+Zotero's `install()` removes an existing style matched by **id, filename, or
+title**, then deletes that file unconditionally (`style.js` ~429 and 515). Both
+cases are confirmed before installing, because either one destroys a customer's
+file.
+
+### ID collision (test 11)
 
 1. Install a style manually whose `<id>` matches one you sell.
 2. Install that style through the plugin.
-3. **Expected:** a confirmation dialog naming the existing style.
-   - **Cancel** → nothing installed, no ledger entry, original file intact.
+3. **Expected:** a dialog naming the existing style.
+   - **Cancel** → nothing installed, no ledger entry, original intact.
    - **OK** → installed, ledger entry written with `preexisting: true`, and it
-     _is_ removed on lapse. This is deliberate: by install time the original has
-     already been overwritten, so declining to remove it later would not give
-     the customer their file back — it would only leave paid content on disk.
+     _is_ removed on lapse. Deliberate: by install time the original has already
+     been overwritten, so declining to remove it later would not give the
+     customer their file back — it would only leave paid content on disk.
+
+### Title collision (test 17)
+
+The subtler one. A style with a **different** id but the **same title** is also
+deleted by Zotero, and the id check cannot see it coming.
+
+1. Install a style with a distinct id but titled exactly like one you sell.
+2. Install the purchased style through the plugin.
+3. **Expected:** a dialog explaining the existing style will be deleted because
+   Zotero treats same-named styles as the same style. Cancel aborts the install.
+
+> Practical consequence for the catalog: **style titles are effectively a global
+> namespace in Zotero**, not just IDs. A shop style titled "APA 7th edition"
+> will delete a customer's own file with that exact title. Distinctive titles
+> avoid the dialog ever firing.
 
 ---
 
@@ -343,3 +412,16 @@ Keep these in mind when reviewing changes to this area.
 - **Never clear the ledger wholesale.** Entries that failed or were skipped are
   retained for retry; clearing regardless would orphan the surviving files
   permanently.
+- **Zotero deletes by title, not just id.** `install()` will remove an unrelated
+  style that merely shares a name. Anything touching the install path must keep
+  the title-clash confirmation, or customers lose their own work silently.
+- **The stored hash is the server's, not the file's.** An earlier version of the
+  hash test recorded the hash of the file _after_ writing it to disk, which
+  proved nothing — production stores what the server sent. The test now hashes
+  the original string and asserts the on-disk round trip matches, so if Zotero
+  ever stops writing style content verbatim the sweep fails loudly instead of
+  silently matching nothing. Beware tests that assert against their own output.
+- **`bootstrap.js` uninstall is ledger-only.** It runs after teardown, with no
+  access to the plugin's modules, so it cannot do the hash sweep. An untracked
+  hand-copied file survives plugin removal. Accepted trade-off; do not "fix" it
+  by duplicating crypto into bootstrap without weighing the maintenance cost.

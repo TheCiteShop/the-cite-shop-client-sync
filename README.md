@@ -56,9 +56,16 @@ Styles installed by this plugin are tied to an active subscription.
   are removed the next time the plugin checks.
 - Clearing your credentials, or uninstalling the plugin, also removes them.
 
-Only styles this plugin installed are ever removed. Styles you installed
-yourself from Zotero's public style repository are left alone. If a purchased
-style would replace one you already have, the plugin asks first.
+**Your own styles are never touched.** Removal only ever applies to purchased
+styles — either ones this plugin installed, or files that are byte-for-byte
+identical to a style we supplied (so a copy you moved between machines by hand
+is still covered). A style of your own is left strictly alone, even if it
+happens to share an ID with one of ours, because its contents differ.
+
+If installing a purchased style would replace or delete a style you already
+have, the plugin asks first. That includes the case where your style merely
+shares a _name_ with a purchased one — Zotero treats styles with the same name
+as the same style, so it would otherwise be overwritten without warning.
 
 ## Troubleshooting
 
@@ -92,5 +99,8 @@ For license issues or support, please contact: info@theciteshop.com
 - Subscription enforcement: license is re-checked at startup, daily, and when
   the settings pane is opened
 - Purchased styles are removed if the subscription ends, or if no license check
-  has succeeded for 3 days; only styles installed by this plugin are touched
+  has succeeded for 3 days. Only purchased styles are ever touched — a style of
+  your own is left alone even if it shares an ID with one of ours
+- You are warned before installing a style that would replace or delete one you
+  already have, whether it shares an ID or just a name
 - Auto-opens settings on first install
