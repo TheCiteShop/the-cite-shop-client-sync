@@ -34,7 +34,7 @@
     "update-deps": "npm update --save"
   },
   "dependencies": {
-    "core-js": "^3.48.0",
+    "core-js": "^3.51.0",
     "zotero-plugin-toolkit": "^5.2.0"
   },
   "devDependencies": {
@@ -42,12 +42,12 @@
     "@types/mocha": "^10.0.10",
     "@types/node": "^25.9.5",
     "@zotero-plugin/eslint-config": "^0.6.7",
-    "chai": "^6.2.1",
-    "eslint": "^10.8.1",
+    "chai": "^6.3.0",
+    "eslint": "^10.13.0",
     "mocha": "^11.3.0",
-    "prettier": "^3.7.4",
+    "prettier": "^3.9.10",
     "typescript": "^6.0.3",
-    "zotero-plugin-scaffold": "^0.8.8",
+    "zotero-plugin-scaffold": "^0.9.3",
     "zotero-types": "^4.1.0-beta.4"
   },
   "overrides": {
