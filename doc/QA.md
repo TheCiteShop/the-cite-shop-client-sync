@@ -22,6 +22,23 @@ dev or test runs at real library data means real style files get deleted.
 | `npm start` | `.scaffold/profile`                       | `.scaffold/data`      |
 | `npm test`  | `.scaffold/test/profile` (wiped each run) | `.scaffold/test/data` |
 
+### Styles live in the data directory, not the profile
+
+A separate Zotero **profile** does not on its own protect your styles — they are
+stored under the **data directory**, which several profiles can share. Check
+`extensions.zotero.dataDir` in the profile's `prefs.js` before testing removal
+against a real profile.
+
+As configured on the maintainer's machine (verified 2026-11-09):
+
+| Profile     | Data dir                               | Styles                |
+| ----------- | -------------------------------------- | --------------------- |
+| `default`   | `C:\Users\Lenno14\Zotero`              | 74 — the real library |
+| `Test User` | `C:\Users\Lenno14\Zotero Test Profile` | 51 — safe for QA      |
+
+The `Test User` profile has its own data dir, so installing a locally built XPI
+there and exercising removal cannot touch the real 74 styles.
+
 If you deliberately test against a real profile, back it up first:
 
 ```bash
@@ -197,6 +214,31 @@ Extend those tables in preference to adding integration tests.
   invoked synchronously, so it was unclear whether the awaited removals would
   be cut short. They are not.
 
+**Verified 2026-11-09 against Zotero 11.0-beta.3+212a7d6a5** (Gecko 153.6.0),
+during the toolkit v6 / scaffold 0.9.4 / mocha 12 upgrades:
+
+- **The full unit suite passes on Zotero 11** — 43/43, run four times (baseline,
+  then after each upgrade stage). This matters more than it sounds: the removal
+  path touches undocumented internals that get no compile-time checking, and the
+  suite exercises them inside a real Zotero.
+- **Test 17's canary held.** `test/titleclash.test.ts` still passes, so Zotero 11
+  has **not** repaired the dead nsIFile `.file` branch in `_install`. The
+  title-clash warning stays removed. If this test ever fails on a new Zotero,
+  reinstate it (see §7 and §9).
+- **Matrix test 5 (offline past the window) verified end to end** via the §8
+  smoke test on toolkit v6: one ledger style deleted, **16 other styles
+  survived**, `managedStyles` reduced to `{"v":1,"entries":[]}`, `lastSyncOk`
+  unchanged, clean shutdown.
+- **The plugin loads and is enabled on Zotero 11** once built with
+  `strict_max_version: "11.*"`. A build at `10.*` is shown as incompatible and
+  does not load there at all — which doubles as an install check: the old build
+  appears disabled, the new one enabled.
+
+Tests **7** (rate limited), **11** (ID collision dialog), **12** (logout) and
+**15** (timer) remain unexercised on any Zotero version. Test **16** (untracked
+sweep) is covered at unit level in `test/ledger.test.ts` — both the hash-match
+removal and the hash-mismatch skip — but has not been run through the GUI.
+
 Everything else in the table below is still unexercised.
 
 Run with `npm start`. Reset state between tests using the snippet above.
@@ -320,7 +362,9 @@ The whole removal path can be exercised end to end by seeding the isolated dev
 profile before launch, then checking the filesystem. Nothing needs clicking, and
 it verifies the dangerous path and the safety property in one run.
 
-**Verified working on 2026-08-10.**
+**Verified working on 2026-08-10**, and re-run **2026-11-09 on Zotero
+11.0-beta.3 with toolkit v6** — same result, with 16 control styles surviving
+alongside the single removal.
 
 ```bash
 # 1. Seed two styles into the isolated data dir: one to be removed, one control
@@ -443,6 +487,15 @@ Keep these in mind when reviewing changes to this area.
   the original string and asserts the on-disk round trip matches, so if Zotero
   ever stops writing style content verbatim the sweep fails loudly instead of
   silently matching nothing. Beware tests that assert against their own output.
+- **`zotero-plugin build` wipes `.scaffold/build` on every run.** The `.xpi`
+  only exists between one build finishing and the next starting, so copy it
+  elsewhere before installing it by hand — a path that worked a minute ago can
+  be empty.
+- **A popup is not evidence of removal.** `notifyStylesRemoved` fires only when
+  `report.removed.length > 0`, so a silent no-op produces **no** popup at all.
+  Popup-present and popup-absent are both ambiguous: check the filesystem and
+  the `managedStyles` pref. The pref emptying is the real proof, since entries
+  are dropped only when removal actually succeeded.
 - **`bootstrap.js` uninstall is ledger-only.** It runs after teardown, with no
   access to the plugin's modules, so it cannot do the hash sweep. An untracked
   hand-copied file survives plugin removal. Accepted trade-off; do not "fix" it
