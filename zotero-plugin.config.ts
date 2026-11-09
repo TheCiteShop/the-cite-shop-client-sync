@@ -14,7 +14,11 @@ export default defineConfig({
     "https://github.com/{{owner}}/{{repo}}/releases/download/v{{version}}/{{xpiName}}.xpi",
 
   build: {
-    assets: ["addon/**/*.*", "*.csl", "customers.json"],
+    // Only ship what lives under addon/. The template also globbed "*.csl" and
+    // "customers.json" from the repo root: the latter is long gone, and the
+    // former would bundle any style left in the root while testing straight
+    // into the public XPI.
+    assets: ["addon/**/*.*"],
     define: {
       ...pkg.config,
       author: pkg.author.name,

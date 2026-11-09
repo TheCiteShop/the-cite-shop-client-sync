@@ -14,3 +14,5 @@ tsconfig.tsbuildinfo
 .scaffold
 build
 logs
+# Paid styles used for manual testing must never be committed or bundled.
+*.csl
