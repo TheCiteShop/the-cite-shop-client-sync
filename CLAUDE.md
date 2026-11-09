@@ -28,7 +28,7 @@ This is a Zotero plugin that enables users to install and manage custom citation
 ## Technology Stack
 
 - **Language**: TypeScript
-- **Framework**: [Zotero Plugin Toolkit](https://github.com/windingwind/zotero-plugin-toolkit) v5.1.0-beta.13
+- **Framework**: [Zotero Plugin Toolkit](https://github.com/windingwind/zotero-plugin-toolkit) v5.2.0
 - **Build Tool**: [zotero-plugin-scaffold](https://www.npmjs.com/package/zotero-plugin-scaffold)
 - **Testing**: Mocha + Chai
 - **Code Quality**: ESLint + Prettier
@@ -303,7 +303,7 @@ Localization strings are stored in `addon/locale/` and referenced via `getString
 Tests are written in Mocha + Chai and run inside a real Zotero instance.
 
 ```bash
-npx zotero-plugin test --exit-on-finish   # 41 passing
+npx zotero-plugin test --exit-on-finish   # 43 passing
 ```
 
 Plain `npm test` stays in watch mode and never exits on its own.

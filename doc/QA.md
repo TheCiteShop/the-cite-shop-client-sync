@@ -177,7 +177,7 @@ npx zotero-plugin test --exit-on-finish
 
 `npm test` alone stays in watch mode and will not exit on its own.
 
-Expected: **41 passing.** These cover the two pure functions —
+Expected: **43 passing.** These cover the two pure functions —
 `classifyResponse` and `decideAction` — which encode every decision that can
 delete a customer's files, plus the hash sweep, which installs a real CSL into
 Zotero and asserts it is removed on a hash match and **spared** on a mismatch.
