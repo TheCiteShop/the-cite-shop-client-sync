@@ -88,6 +88,13 @@ For license issues or support, please contact: info@theciteshop.com
 
 ## Changelog
 
+### v0.0.2
+
+- **Zotero 11 support.** The plugin now loads on Zotero 11 as well as Zotero 7
+  through 10.
+- Security and dependency maintenance: all high-severity advisories in the
+  build toolchain cleared. No change to how the plugin behaves.
+
 ### v0.0.1
 
 - Initial release
