@@ -1,7 +1,7 @@
 {
   "name": "the-cite-shop-client-sync",
   "type": "module",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "A Zotero plugin for managing and installing custom citation styles from The Cite Shop.",
   "config": {
     "addonName": "The Cite Shop Client Sync",
