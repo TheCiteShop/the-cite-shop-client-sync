@@ -12,10 +12,11 @@ permissions:
 
 jobs:
   create-release:
-    uses: zotero-plugin-dev/workflows/.github/workflows/release-plugin.yml@main
+    uses: zotero-plugin-dev/workflows/.github/workflows/release-plugin.yml@899417a9d7f9453df25d4241d4ee16a70a743e58
     # You can customize any of the inputs here.
     # If you omit an input, its default value will be used.
     with:
       build: "npm run build"
       release: "npm run release"
-    secrets: inherit
+    secrets:
+      GH_TOKEN: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
