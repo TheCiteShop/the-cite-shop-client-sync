@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   create-release:
-    uses: zotero-plugin-dev/workflows/.github/workflows/release-plugin.yml@899417a9d7f9453df25d4241d4ee16a70a743e58
+    uses: zotero-plugin-dev/workflows/.github/workflows/release-plugin.yml@756312b456cf90ce62078111508c7b63c5e8a7b3
     # You can customize any of the inputs here.
     # If you omit an input, its default value will be used.
     with:
